@@ -258,6 +258,7 @@ Font:           Inter (Google Fonts)
 > Add any bugs, incomplete features, or pending decisions here
 - Backend uses Roboflow 3-model hosted inference + EasyOCR (Python 3.14 compatible)
 - Roboflow API key in `drishti-backend/.env` (copy from `.env.example`) — never commit `.env`
+- Teammates cloning the repo must run `copy .env.example .env` and add their own Roboflow key
 - DEMO MODE uses COCO yolov8n.pt + mock violation overlay until `models/drishti.pt` is trained
 - Run Colab notebook → download `drishti_best.pt` → save as `drishti-backend/models/drishti.pt`
 - Frontend integration guide created at `FRONTEND_INTEGRATION.md` — share with frontend teammate
@@ -270,7 +271,9 @@ Font:           Inter (Google Fonts)
 - Frontend runs on: http://localhost:5173
 - **Frontend ↔ Backend contract:** `FRONTEND_INTEGRATION.md` (root)
 - Backend README: `drishti-backend/README.md`
+- **Secrets:** `drishti-backend/.env` (gitignored) — see `.env.example`
 - **Training notebook:** `training/DRISHTI_YOLOv8_Training.ipynb`
+- **GitHub:** https://github.com/debug-create/flip_BS
 
 ---
 
