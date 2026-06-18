@@ -28,14 +28,14 @@ No new hardware required. Augments ASTraM + BATCS, doesn't replace them.
 ## Core Features (4 Modules)
 
 ### MODULE 1: DETECT
-- YOLOv8 multi-class detection on traffic images/video
+- Roboflow hosted 3-model pipeline (vehicle + helmet + plate)
 - 8 violation types: Helmet Non-Compliance, Seatbelt Non-Compliance, 
   Triple Riding, Wrong-Side Driving, Stop-Line Violation, 
   Red-Light Running, Illegal Parking, Defective/Missing Plate
-- Mock violation overlay in DEMO MODE (replace with fine-tuned weights)
+- Helmet + triple-riding from helmet model on two-wheeler crops
 
 ### MODULE 2: IDENTIFY  
-- PaddleOCR for license plate text extraction
+- EasyOCR for license plate text extraction
 - Indian plate regex: `[A-Z]{2}[0-9]{1,2}[A-Z]{1,2}[0-9]{4}`
 - Multi-Angle Evidence Package (MAEP) — 4-camera frame stitching (Phase 2 vision)
 - DEMO MODE: single image, extract best readable plate
@@ -56,11 +56,11 @@ No new hardware required. Augments ASTraM + BATCS, doesn't replace them.
 ## Tech Stack
 
 ### Backend
-- Python 3.10+
+- Python 3.10+ (tested on 3.14)
 - FastAPI + Uvicorn
-- Ultralytics YOLOv8 (ultralytics package)
+- Roboflow serverless API (vehicle / helmet / plate models)
+- EasyOCR for plate text reading
 - OpenCV (cv2)
-- PaddleOCR + PaddleDetection
 - Pillow, numpy
 - NO database (return JSON, frontend holds session state)
 - NO auth (hackathon demo)
@@ -256,7 +256,8 @@ Font:           Inter (Google Fonts)
 
 ### Known Issues / TODOs
 > Add any bugs, incomplete features, or pending decisions here
-- Backend built but not yet run/tested with full ML deps installed (ultralytics + paddleocr)
+- Backend uses Roboflow 3-model hosted inference + EasyOCR (Python 3.14 compatible)
+- Roboflow API key in `drishti-backend/.env` (copy from `.env.example`) — never commit `.env`
 - DEMO MODE uses COCO yolov8n.pt + mock violation overlay until `models/drishti.pt` is trained
 - Run Colab notebook → download `drishti_best.pt` → save as `drishti-backend/models/drishti.pt`
 - Frontend integration guide created at `FRONTEND_INTEGRATION.md` — share with frontend teammate
@@ -300,5 +301,5 @@ Font:           Inter (Google Fonts)
 
 ---
 
-*Last updated: June 17, 2026 (Colab training notebook + fine-tuned model support in detect.py)*
+*Last updated: June 18, 2026 (Roboflow 3-model pipeline)*
 *Next session should start by reading this file and updating Completed checkboxes*

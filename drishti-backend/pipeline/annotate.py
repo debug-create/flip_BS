@@ -61,7 +61,7 @@ def annotate_image(
         _draw_label(annotated, label, x1, y1, color)
 
         plate_text = plate.get("plate_text")
-        if plate_text and plate_text != "UNREADABLE":
+        if plate_text and plate_text not in {"UNREADABLE", "UNDETECTED"}:
             plate_label = f"PLATE: {plate_text}"
             plate_y = min(y2 + 22, annotated.shape[0] - 4)
             _draw_label(annotated, plate_label, x1, plate_y, COLOR_PLATE)

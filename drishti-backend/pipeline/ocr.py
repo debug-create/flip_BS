@@ -1,65 +1,85 @@
-"""License plate OCR using PaddleOCR."""
-
-from __future__ import annotations
-
 import re
-
-import cv2
 import numpy as np
+import easyocr
+import logging
 
-INDIAN_PLATE_PATTERN = re.compile(r"^[A-Z]{2}[0-9]{1,2}[A-Z]{1,2}[0-9]{4}$")
+logger = logging.getLogger(__name__)
 
-
-def _normalize_plate_text(text: str) -> str:
-    return re.sub(r"[^A-Z0-9]", "", text.upper())
-
+# Indian license plate pattern
+# Covers: KA03MJ1234, MH12AB1234, DL8CAB1234 etc.
+INDIAN_PLATE_PATTERN = re.compile(
+    r'[A-Z]{2}[\s\-]?[0-9]{1,2}[\s\-]?[A-Z]{1,3}[\s\-]?[0-9]{4}'
+)
 
 class PlateOCR:
     def __init__(self):
-        from paddleocr import PaddleOCR
+        logger.info("Loading EasyOCR (English)...")
+        # gpu=False forces CPU mode — works on all machines
+        self.reader = easyocr.Reader(['en'], gpu=False, verbose=False)
+        logger.info("EasyOCR loaded successfully.")
 
-        self.ocr = PaddleOCR(use_angle_cls=True, lang="en", show_log=False)
+    def extract_plate(self, image: np.ndarray, plate_bbox: list) -> dict:
+        """
+        Crop plate region, run OCR, extract Indian plate text.
 
-    def extract_plate(self, image: np.ndarray, vehicle_bbox: list[int]) -> dict:
-        x1, y1, x2, y2 = vehicle_bbox
-        h, w = image.shape[:2]
+        Args:
+            image: full frame numpy array (BGR, OpenCV format)
+            plate_bbox: [x1, y1, x2, y2] in pixel coords from plate model
 
-        pad = 10
-        x1 = max(0, x1 - pad)
-        y1 = max(0, y1 - pad)
-        x2 = min(w, x2 + pad)
-        y2 = min(h, y2 + pad)
-
-        crop = image[y1:y2, x1:x2]
-        if crop.size == 0:
+        Returns:
+            dict with plate_text, confidence, raw_ocr
+        """
+        try:
+            x1, y1, x2, y2 = [int(c) for c in plate_bbox]
+            h, w = image.shape[:2]
+            # Plate bbox is already tight from plate model — minimal padding only
+            x1p = max(0, x1 - 3)
+            y1p = max(0, y1 - 3)
+            x2p = min(w, x2 + 3)
+            y2p = min(h, y2 + 3)
+            crop = image[y1p:y2p, x1p:x2p]
+            
+            if crop.size == 0:
+                return {"plate_text": "UNREADABLE", "confidence": 0.0, "raw_ocr": ""}
+            
+            # EasyOCR returns list of [bbox, text, confidence]
+            results = self.reader.readtext(crop)
+            
+            if not results:
+                return {"plate_text": "UNREADABLE", "confidence": 0.0, "raw_ocr": ""}
+            
+            # Collect all detected text
+            raw_texts = [r[1].upper().replace(" ", "").replace("-", "") 
+                        for r in results]
+            raw_combined = " | ".join(raw_texts)
+            
+            # Try to match Indian plate pattern in each result
+            best_plate = None
+            best_conf = 0.0
+            
+            for bbox, text, conf in results:
+                cleaned = text.upper().replace(" ", "").replace("-", "")
+                match = INDIAN_PLATE_PATTERN.search(cleaned)
+                if match and conf > best_conf:
+                    best_plate = match.group(0).replace(" ", "").replace("-", "")
+                    best_conf = conf
+            
+            if best_plate:
+                return {
+                    "plate_text": best_plate,
+                    "confidence": round(float(best_conf), 4),
+                    "raw_ocr": raw_combined
+                }
+            else:
+                # No valid plate pattern found — return best text anyway
+                # (useful for partial reads)
+                best_result = max(results, key=lambda r: r[2])
+                return {
+                    "plate_text": "UNREADABLE",
+                    "confidence": 0.0,
+                    "raw_ocr": raw_combined
+                }
+                
+        except Exception as e:
+            logger.error(f"OCR failed for plate bbox {plate_bbox}: {e}")
             return {"plate_text": "UNREADABLE", "confidence": 0.0, "raw_ocr": ""}
-
-        result = self.ocr.ocr(crop, cls=True)
-        if not result or result[0] is None:
-            return {"plate_text": "UNREADABLE", "confidence": 0.0, "raw_ocr": ""}
-
-        best_match: dict | None = None
-        raw_texts: list[str] = []
-
-        for line in result[0]:
-            text = line[1][0]
-            confidence = float(line[1][1])
-            raw_texts.append(text)
-            normalized = _normalize_plate_text(text)
-
-            if INDIAN_PLATE_PATTERN.match(normalized):
-                if best_match is None or confidence > best_match["confidence"]:
-                    best_match = {
-                        "plate_text": normalized,
-                        "confidence": round(confidence, 4),
-                        "raw_ocr": text,
-                    }
-
-        if best_match:
-            return best_match
-
-        return {
-            "plate_text": "UNREADABLE",
-            "confidence": 0.0,
-            "raw_ocr": " | ".join(raw_texts),
-        }

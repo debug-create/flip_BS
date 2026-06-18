@@ -1,34 +1,28 @@
-"""YOLOv8-based violation detection with DEMO MODE mock overlay."""
-
-from __future__ import annotations
-
-import logging
 import os
-import random
-from pathlib import Path
-from typing import Any
+import time
+import logging
 
+import cv2
 import numpy as np
-
-from pipeline.preprocess import preprocess_image, remap_bbox_to_original
+import requests
 
 logger = logging.getLogger(__name__)
 
-CLASS_NAMES = {
-    0: "person",
-    1: "bicycle",
-    2: "motorcycle",
-    3: "car",
-    4: "bus",
-    5: "truck",
-    "helmet_violation": "Helmet Non-Compliance",
-    "no_seatbelt": "Seatbelt Non-Compliance",
-    "triple_riding": "Triple Riding",
-    "wrong_side": "Wrong-Side Driving",
-    "stop_line": "Stop-Line Violation",
-    "red_light": "Red-Light Running",
-    "illegal_parking": "Illegal Parking",
-    "defective_plate": "Defective/Missing Plate",
+ROBOFLOW_API_KEY = os.getenv("ROBOFLOW_API_KEY", "")
+ROBOFLOW_URL = os.getenv("ROBOFLOW_URL", "https://serverless.roboflow.com")
+
+HELMET_MODEL = "helmet-detection-ligfk/4"
+VEHICLE_MODEL = "vehicle-detection-3mmwj/8"
+PLATE_MODEL = "license-plate-recognition-rxg4e/11"
+
+TWO_WHEELER_CLASSES = {
+    "motorcycle", "bike", "motorbike", "bicycle",
+    "two-wheeler", "scooter", "moto", "motor",
+}
+
+VEHICLE_CLASSES = {
+    "motorcycle", "bike", "motorbike", "bicycle", "scooter",
+    "car", "bus", "truck", "van", "auto", "vehicle",
 }
 
 VIOLATION_TYPES = [
@@ -42,183 +36,198 @@ VIOLATION_TYPES = [
     "Defective/Missing Plate",
 ]
 
-VEHICLE_CLASSES = {"motorcycle", "car", "bus", "truck", "bicycle"}
-DEFAULT_MODEL = "models/yolov8n.pt"
-FINE_TUNED_MODEL = "models/drishti.pt"
-
-# Class schema from Colab training notebook (drishti.pt)
-DRISHTI_VIOLATION_CLASS_MAP = {
-    "helmet_violation": "Helmet Non-Compliance",
-    "triple_riding": "Triple Riding",
-    "stop_line_violation": "Stop-Line Violation",
-    "red_light_violation": "Red-Light Running",
-    "illegal_parking": "Illegal Parking",
-    "wrong_side": "Wrong-Side Driving",
-}
-DRISHTI_VEHICLE_CLASSES = {"motorcycle", "car", "bus", "truck"}
-
-
-def _bbox_center(bbox: list[int]) -> tuple[float, float]:
-    x1, y1, x2, y2 = bbox
-    return (x1 + x2) / 2, (y1 + y2) / 2
-
-
-def _bbox_area(bbox: list[int]) -> float:
-    x1, y1, x2, y2 = bbox
-    return max(0, x2 - x1) * max(0, y2 - y1)
-
-
-def _point_in_bbox(point: tuple[float, float], bbox: list[int], margin: float = 0.15) -> bool:
-    x, y = point
-    x1, y1, x2, y2 = bbox
-    w = x2 - x1
-    h = y2 - y1
-    return (
-        x1 - w * margin <= x <= x2 + w * margin
-        and y1 - h * margin <= y <= y2 + h * margin
-    )
-
-
-def mock_violation_overlay(detections: list[dict], image_shape: tuple[int, int]) -> list[dict]:
-    """
-    DEMO MODE — replace with fine-tuned model for production.
-
-    Adds plausible violation labels on top of real COCO detections so the
-    hackathon demo looks convincing before custom weights are trained.
-    """
-    if not detections:
-        return detections
-
-    _, img_h = image_shape
-    persons = [d for d in detections if d["class_name"] == "person"]
-    motorcycles = [d for d in detections if d["class_name"] == "motorcycle"]
-    cars = [d for d in detections if d["class_name"] in {"car", "bus", "truck"}]
-
-    used_persons: set[int] = set()
-
-    for moto in motorcycles:
-        riders = []
-        for idx, person in enumerate(persons):
-            if idx in used_persons:
-                continue
-            cx, cy = _bbox_center(person["bbox"])
-            if _point_in_bbox((cx, cy), moto["bbox"]):
-                riders.append((idx, person))
-
-        if len(riders) >= 3:
-            moto["is_violation"] = True
-            moto["violation_type"] = CLASS_NAMES["triple_riding"]
-            moto["confidence"] = round(random.uniform(0.78, 0.94), 4)
-            for idx, _ in riders:
-                used_persons.add(idx)
-        elif len(riders) >= 1:
-            moto["is_violation"] = True
-            moto["violation_type"] = CLASS_NAMES["helmet_violation"]
-            moto["confidence"] = round(random.uniform(0.72, 0.91), 4)
-            for idx, _ in riders:
-                used_persons.add(idx)
-
-    bottom_threshold = img_h * 0.75
-    for vehicle in cars:
-        _, cy = _bbox_center(vehicle["bbox"])
-        _, y2 = vehicle["bbox"]
-        if y2 >= bottom_threshold or cy >= bottom_threshold:
-            vehicle["is_violation"] = True
-            vehicle["violation_type"] = CLASS_NAMES["stop_line"]
-            vehicle["confidence"] = round(random.uniform(0.70, 0.88), 4)
-
-    return detections
-
 
 class ViolationDetector:
-    def __init__(self, model_path: str = DEFAULT_MODEL):
-        from ultralytics import YOLO
+    model_version = "Roboflow-3Model"
 
-        backend_root = Path(__file__).resolve().parent.parent
-        resolved_path = backend_root / model_path
+    def __init__(self):
+        if not ROBOFLOW_API_KEY:
+            raise ValueError(
+                "ROBOFLOW_API_KEY is not set. "
+                "Copy drishti-backend/.env.example to .env and add your Roboflow API key."
+            )
+        self.session = requests.Session()
+        logger.info(
+            "DRISHTI ViolationDetector ready. "
+            "Models: vehicle(84.2% mAP) + helmet(81.1% mAP) + plate(97.2% mAP)",
+        )
 
-        if not resolved_path.exists():
-            fine_tuned = backend_root / FINE_TUNED_MODEL
-            if fine_tuned.exists():
-                resolved_path = fine_tuned
-                logger.info("Loaded fine-tuned weights from %s", fine_tuned)
-            else:
-                logger.warning(
-                    "Fine-tuned weights not found at %s. "
-                    "Using yolov8n.pt (auto-download). "
-                    "Place trained weights at models/drishti.pt for production accuracy.",
-                    fine_tuned,
-                )
-                resolved_path = backend_root / DEFAULT_MODEL
+    def _call_roboflow(self, image: np.ndarray, model_id: str) -> list:
+        """
+        Send a numpy BGR image to Roboflow hosted inference via HTTP.
+        Uses requests directly (inference-sdk does not support Python 3.14).
+        Returns list of prediction dicts, or [] on any failure.
+        """
+        try:
+            ok, buffer = cv2.imencode(".jpg", image)
+            if not ok:
+                return []
 
-        self.model_path = str(resolved_path)
-        self.model = YOLO(self.model_path)
-        self.is_fine_tuned = "drishti.pt" in self.model_path
-        self.model_version = "drishti.pt" if self.is_fine_tuned else "YOLOv8n-DEMO"
+            response = self.session.post(
+                f"{ROBOFLOW_URL}/{model_id}",
+                params={"api_key": ROBOFLOW_API_KEY},
+                files={"file": ("image.jpg", buffer.tobytes(), "image/jpeg")},
+                timeout=60,
+            )
+            response.raise_for_status()
+            result = response.json()
+            return result.get("predictions", [])
+        except Exception as e:
+            logger.error(f"Roboflow API error [{model_id}]: {e}")
+            return []
 
-    def _parse_fine_tuned_detection(self, class_id: int, confidence: float, bbox: list[int]) -> dict | None:
-        class_name = self.model.names.get(class_id, f"class_{class_id}")
-        if class_name in DRISHTI_VIOLATION_CLASS_MAP:
-            return {
-                "class_id": class_id,
-                "class_name": class_name,
-                "confidence": confidence,
-                "bbox": bbox,
-                "is_violation": True,
-                "violation_type": DRISHTI_VIOLATION_CLASS_MAP[class_name],
-            }
-        if class_name in DRISHTI_VEHICLE_CLASSES or class_name == "person":
-            return {
-                "class_id": class_id,
-                "class_name": class_name,
-                "confidence": confidence,
-                "bbox": bbox,
-                "is_violation": False,
-                "violation_type": None,
-            }
-        return None
+    @staticmethod
+    def _pred_to_xyxy(pred: dict) -> list[float]:
+        """
+        Convert Roboflow center-format prediction to [x1,y1,x2,y2].
+        Roboflow returns: x=cx, y=cy, width=w, height=h
+        """
+        cx = pred.get("x", 0)
+        cy = pred.get("y", 0)
+        bw = pred.get("width", 0)
+        bh = pred.get("height", 0)
+        return [cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2]
+
+    @staticmethod
+    def _crop_with_padding(image: np.ndarray, bbox: list, pad: int = 20) -> tuple:
+        """
+        Crop image at bbox [x1,y1,x2,y2] with padding.
+        Returns (crop, x1_padded, y1_padded) so bbox coords can be
+        remapped back to full image space.
+        """
+        h, w = image.shape[:2]
+        x1, y1, x2, y2 = [int(c) for c in bbox]
+        x1p = max(0, x1 - pad)
+        y1p = max(0, y1 - pad)
+        x2p = min(w, x2 + pad)
+        y2p = min(h, y2 + pad)
+        return image[y1p:y2p, x1p:x2p], x1p, y1p
 
     def detect(self, image: np.ndarray) -> list[dict]:
-        preprocessed, transform_info = preprocess_image(image)
-        orig_h, orig_w = image.shape[:2]
+        """
+        3-stage detection pipeline:
+          Stage 1 — Vehicle detection on full image
+          Stage 2 — Helmet check on every two-wheeler crop
+          Stage 3 — Plate localisation on every vehicle crop
 
-        results = self.model.predict(preprocessed, verbose=False)
-        detections: list[dict] = []
+        Args:
+            image: numpy array in BGR uint8 (standard OpenCV format)
 
-        if not results:
-            return detections
+        Returns:
+            List of detection dicts (see API contract in context.md)
+        """
+        start = time.perf_counter()
+        detections = []
+        det_id = 1
 
-        result = results[0]
-        if result.boxes is None:
-            return detections
+        vehicle_preds = self._call_roboflow(image, VEHICLE_MODEL)
 
-        for box in result.boxes:
-            class_id = int(box.cls.item())
-            confidence = round(float(box.conf.item()), 4)
-            xyxy = box.xyxy[0].tolist()
-            bbox = remap_bbox_to_original(xyxy, transform_info)
+        raw_vehicles = []
+        for pred in vehicle_preds:
+            conf = pred.get("confidence", 0)
+            cls_name = pred.get("class", "unknown").lower()
+            if conf < 0.35:
+                continue
+            raw_vehicles.append({
+                "cls_name": cls_name,
+                "conf": conf,
+                "bbox": self._pred_to_xyxy(pred),
+            })
 
-            if self.is_fine_tuned:
-                parsed = self._parse_fine_tuned_detection(class_id, confidence, bbox)
-                if parsed:
-                    detections.append(parsed)
+        if not raw_vehicles:
+            logger.info("No vehicles detected in image.")
+            return []
+
+        for v in raw_vehicles:
+            det = {
+                "detection_id": f"D{det_id:03d}",
+                "class_name": v["cls_name"],
+                "confidence": round(v["conf"], 4),
+                "bbox": [round(c) for c in v["bbox"]],
+                "is_violation": False,
+                "violation_type": None,
+                "violation_confidence": None,
+                "plate": None,
+                "plate_bbox": None,
+            }
+            det_id += 1
+
+            is_two_wheeler = any(tw in v["cls_name"] for tw in TWO_WHEELER_CLASSES)
+
+            if is_two_wheeler:
+                crop, _, _ = self._crop_with_padding(image, v["bbox"], pad=20)
+
+                if crop.size > 0:
+                    helmet_preds = self._call_roboflow(crop, HELMET_MODEL)
+
+                    rider_count = 0
+                    no_helmet_cnt = 0
+                    best_nh_conf = 0.0
+
+                    for hp in helmet_preds:
+                        hcls = hp.get("class", "").lower()
+                        hconf = hp.get("confidence", 0)
+                        if hconf < 0.35:
+                            continue
+
+                        rider_count += 1
+
+                        is_no_helmet = any(
+                            neg in hcls
+                            for neg in ["no", "without", "non", "bare", "nohelmet"]
+                        )
+                        if is_no_helmet:
+                            no_helmet_cnt += 1
+                            best_nh_conf = max(best_nh_conf, hconf)
+
+                    if rider_count >= 3:
+                        det["is_violation"] = True
+                        det["violation_type"] = "Triple Riding"
+                        det["violation_confidence"] = round(
+                            min(0.99, 0.75 + rider_count * 0.04), 4
+                        )
+                    elif no_helmet_cnt > 0:
+                        det["is_violation"] = True
+                        det["violation_type"] = "Helmet Non-Compliance"
+                        det["violation_confidence"] = round(best_nh_conf, 4)
+
+            detections.append(det)
+
+        for det in detections:
+            crop, ox, oy = self._crop_with_padding(image, det["bbox"], pad=5)
+            if crop.size == 0:
                 continue
 
-            class_name = CLASS_NAMES.get(class_id, f"class_{class_id}")
-            if class_name not in VEHICLE_CLASSES and class_name != "person":
-                continue
+            plate_preds = self._call_roboflow(crop, PLATE_MODEL)
 
-            detections.append(
-                {
-                    "class_id": class_id,
-                    "class_name": class_name,
-                    "confidence": confidence,
-                    "bbox": bbox,
-                    "is_violation": False,
-                    "violation_type": None,
-                }
-            )
+            best_conf = 0.0
+            best_plate_bbox = None
 
-        if not self.is_fine_tuned:
-            detections = mock_violation_overlay(detections, (orig_w, orig_h))
+            for pp in plate_preds:
+                pconf = pp.get("confidence", 0)
+                if pconf < 0.40 or pconf <= best_conf:
+                    continue
+                best_conf = pconf
+                px1, py1, px2, py2 = self._pred_to_xyxy(pp)
+                best_plate_bbox = [
+                    ox + px1, oy + py1,
+                    ox + px2, oy + py2,
+                ]
+
+            if best_plate_bbox:
+                det["plate_bbox"] = [round(c) for c in best_plate_bbox]
+
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        violations = sum(1 for d in detections if d["is_violation"])
+        logger.info(
+            f"Pipeline complete — {len(detections)} vehicles, "
+            f"{violations} violations, {elapsed_ms:.1f}ms",
+        )
         return detections
+
+
+def get_detector() -> ViolationDetector:
+    """Module-level singleton. Call once on startup, reuse everywhere."""
+    if not hasattr(get_detector, "_instance"):
+        get_detector._instance = ViolationDetector()
+    return get_detector._instance

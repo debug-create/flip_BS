@@ -35,16 +35,19 @@ def build_evidence_package(
     plates: list[dict],
     source_filename: str,
     inference_time_ms: float,
-    model_version: str = "YOLOv8n-DEMO",
+    model_version: str = "Roboflow-3Model",
 ) -> dict:
     height, width = original_image.shape[:2]
 
     violation_breakdown = {name: 0 for name in VIOLATION_TYPES}
-    vehicle_detections = [d for d in detections if d["class_name"] in VEHICLE_TYPES]
+    vehicle_detections = detections
 
     formatted_detections = []
     for idx, (detection, plate) in enumerate(zip(detections, plates), start=1):
-        is_vehicle = detection["class_name"] in VEHICLE_TYPES
+        is_vehicle = (
+            detection["class_name"] in VEHICLE_TYPES
+            or any(v in detection["class_name"].lower() for v in VEHICLE_TYPES)
+        )
         is_violation = bool(detection.get("is_violation"))
         violation_type = detection.get("violation_type")
 
@@ -53,14 +56,22 @@ def build_evidence_package(
 
         plate_payload = None
         if is_vehicle:
-            plate_payload = {
-                "plate_text": plate.get("plate_text", "UNREADABLE"),
-                "confidence": plate.get("confidence", 0.0),
-            }
+            plate_data = detection.get("plate") or plate
+            plate_text = plate_data.get("plate_text", "UNREADABLE")
+            if plate_text not in {None, "UNDETECTED", "UNREADABLE"}:
+                plate_payload = {
+                    "plate_text": plate_text,
+                    "confidence": plate_data.get("confidence", 0.0),
+                }
+            elif plate_text == "UNREADABLE":
+                plate_payload = {
+                    "plate_text": "UNREADABLE",
+                    "confidence": plate_data.get("confidence", 0.0),
+                }
 
         formatted_detections.append(
             {
-                "detection_id": f"D{idx:03d}",
+                "detection_id": detection.get("detection_id", f"D{idx:03d}"),
                 "class_name": detection["class_name"],
                 "confidence": detection["confidence"],
                 "bbox": detection["bbox"],

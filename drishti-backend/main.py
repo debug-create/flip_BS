@@ -8,7 +8,13 @@ import tempfile
 import time
 from contextlib import asynccontextmanager
 from io import BytesIO
+from pathlib import Path
 from typing import Any
+
+from dotenv import load_dotenv
+
+# Load .env from backend directory before any pipeline imports read env vars
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 import cv2
 import numpy as np
@@ -17,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 
 from pipeline.annotate import annotate_image
-from pipeline.detect import VIOLATION_TYPES, ViolationDetector
+from pipeline.detect import VIOLATION_TYPES, get_detector
 from pipeline.evidence import aggregate_violation_breakdown, build_evidence_package
 from pipeline.ocr import PlateOCR
 
@@ -50,7 +56,7 @@ VIOLATION_DESCRIPTIONS = {
     "Defective/Missing Plate": "License plate missing, obscured, or unreadable.",
 }
 
-detector: ViolationDetector | None = None
+detector = None
 plate_ocr: PlateOCR | None = None
 
 
@@ -58,12 +64,9 @@ plate_ocr: PlateOCR | None = None
 async def lifespan(_: FastAPI):
     global detector, plate_ocr
 
-    detector = ViolationDetector()
+    detector = get_detector()
     plate_ocr = PlateOCR()
-    logger.info(
-        "DRISHTI backend ready. Running in DEMO MODE. "
-        "Replace models/drishti.pt with fine-tuned weights for production."
-    )
+    logger.info("DRISHTI backend ready — Roboflow 3-model pipeline + EasyOCR active.")
     yield
 
 
@@ -140,13 +143,16 @@ def _run_image_pipeline(image: np.ndarray, source_filename: str) -> dict[str, An
     try:
         detections = detector.detect(image)
 
-        plates: list[dict] = []
-        for detection in detections:
-            if detection["class_name"] in {"motorcycle", "car", "bus", "truck", "bicycle"}:
-                plates.append(plate_ocr.extract_plate(image, detection["bbox"]))
-            else:
-                plates.append({"plate_text": None, "confidence": 0.0, "raw_ocr": ""})
+        for det in detections:
+            plate_bbox = det.pop("plate_bbox", None)
+            det.pop("violation_confidence", None)
 
+            if plate_bbox:
+                det["plate"] = plate_ocr.extract_plate(image, plate_bbox)
+            else:
+                det["plate"] = {"plate_text": "UNDETECTED", "confidence": 0.0, "raw_ocr": ""}
+
+        plates = [det["plate"] for det in detections]
         annotated = annotate_image(image, detections, plates)
         inference_time_ms = (time.perf_counter() - start) * 1000
 
@@ -213,10 +219,11 @@ def _extract_video_frames(file_bytes: bytes) -> list[np.ndarray]:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    model_name = "YOLOv8n"
-    if detector and "drishti.pt" in detector.model_path:
-        model_name = "drishti.pt"
-    return {"status": "ok", "model": model_name, "mode": "DEMO"}
+    return {
+        "status": "ok",
+        "model": "roboflow-3model",
+        "mode": "PRODUCTION",
+    }
 
 
 @app.get("/violations/types")

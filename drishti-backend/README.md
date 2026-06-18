@@ -1,6 +1,6 @@
 # DRISHTI Backend
 
-FastAPI inference service for **DRISHTI** — a traffic violation detection system built for Bengaluru Traffic Police (Flipkart Gridlock Hackathon 2.0). Accepts images or short video clips, runs YOLOv8 detection + PaddleOCR plate reading, and returns structured JSON evidence for the React dashboard.
+FastAPI inference service for **DRISHTI** — a traffic violation detection system built for Bengaluru Traffic Police (Flipkart Gridlock Hackathon 2.0). Accepts images or short video clips, runs a **Roboflow 3-model pipeline** (vehicle + helmet + plate) with **EasyOCR** plate reading, and returns structured JSON evidence for the React dashboard.
 
 ## Install
 
@@ -17,7 +17,22 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-> **Note:** First startup downloads `yolov8n.pt` (~6 MB) and initializes PaddleOCR models. This can take a few minutes on CPU.
+Create your local environment file (required for Roboflow API):
+
+```bash
+# Windows
+copy .env.example .env
+# Then edit .env and paste your Roboflow API key
+
+# macOS/Linux
+cp .env.example .env
+```
+
+Get a free API key at https://app.roboflow.com/settings/api
+
+> **Note:** `.env` is gitignored — never commit API keys.
+
+> **Note:** First startup initializes EasyOCR models. Each analysis calls Roboflow hosted inference (requires internet).
 
 ## Run
 
@@ -48,14 +63,14 @@ Violation types:
 curl http://localhost:8000/violations/types
 ```
 
-## DEMO MODE
+## Detection Pipeline
 
-Without fine-tuned weights, the backend uses COCO `yolov8n.pt` plus a **mock violation overlay** (helmet, triple riding, stop-line) so the demo looks realistic. Replace with trained weights:
+1. **Vehicle model** — full-frame vehicle detection
+2. **Helmet model** — helmet/triple-riding check on two-wheeler crops
+3. **Plate model** — license plate localization per vehicle
+4. **EasyOCR** — Indian plate text extraction on plate crop
 
-1. Train YOLOv8 on Roboflow/Kaggle
-2. Download `best.pt`
-3. Save as `models/drishti.pt`
-4. Restart the server
+Roboflow models are called via HTTP (`requests`). On Python 3.14, `inference-sdk` is not available, so the backend uses direct API calls to `https://serverless.roboflow.com`.
 
 ## Frontend Integration
 
@@ -68,10 +83,10 @@ drishti-backend/
 ├── main.py              # FastAPI routes
 ├── pipeline/
 │   ├── preprocess.py    # CLAHE + letterbox
-│   ├── detect.py        # YOLOv8 + mock violations
-│   ├── ocr.py           # PaddleOCR plates
+│   ├── detect.py        # Roboflow 3-model pipeline
+│   ├── ocr.py           # EasyOCR plates
 │   ├── annotate.py      # Draw boxes/labels
 │   └── evidence.py      # JSON evidence builder
-├── models/              # Place drishti.pt here
+├── models/              # (optional legacy local weights)
 └── sample_images/       # Test images
 ```
