@@ -344,9 +344,10 @@ Monospace:      JetBrains Mono
 
 ### Session 4: June 19, 2026 — Night (Latest Updates)
 - Fixed Leaflet SSR crash: wrapped Leaflet module imports dynamically inside `useEffect` in `BengaluruHeatmap.tsx` to prevent `window is not defined` crashes.
+- Redesigned Bengaluru map: Replaced the dark CartoDB tiles and heatmap with standard light OpenStreetMap tiles, circular severity zones, and colored zone pills (Zone 0 to 5) indicating composite risk levels matching the target design.
 - Wired `/debug/models` endpoint: added `getDebugModels` in `api.ts`, updated `types.ts`, and completely rebuilt the `System Status` page (`system.tsx`) to show real-time connectivity status for the three Roboflow models (Vehicle, Helmet, and Plate) individually.
 - Resolved Python dependency loading mismatch: identified that the system had multiple Python environments (3.13 and 3.14). Forced backend startup under Python 3.14 to utilize installed ML packages (`cv2`, `easyocr`).
 
 ---
-*Last updated: June 19, 2026 — 11:25 PM IST*
+*Last updated: June 19, 2026 — 11:32 PM IST*
 *Next: test with real images → raise thresholds → prep for demo*

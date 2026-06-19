@@ -1,50 +1,74 @@
 import { useEffect, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 
-// Bengaluru violation hotspot data
-// Format: [lat, lng, intensity]
-// Based on BTP's 64 accident black spots + ORR corridor data
-const VIOLATION_HOTSPOTS: [number, number, number][] = [
-  // ORR Corridor — highest density (Silk Board to KR Puram)
-  [12.9170, 77.6101, 1.0],   // Silk Board Junction — most congested
-  [12.9352, 77.6245, 0.95],  // HSR Layout junction
-  [12.9539, 77.6374, 0.90],  // Marathahalli
-  [12.9698, 77.6499, 0.85],  // KR Puram
-  [12.9784, 77.6408, 0.80],  // Whitefield Road
-
-  // East Bengaluru — Flipkart delivery zone
-  [12.9716, 77.7480, 0.85],  // Whitefield
-  [12.9856, 77.7094, 0.80],  // ITPL
-  [12.9698, 77.7152, 0.75],  // Kundalahalli
-
-  // City core
-  [12.9767, 77.5713, 0.85],  // MG Road
-  [12.9719, 77.5937, 0.80],  // Indiranagar
-  [12.9850, 77.5533, 0.75],  // Hebbal
-  [12.9141, 77.6101, 0.70],  // Electronic City
-
-  // North corridor
-  [13.0358, 77.5970, 0.65],  // Yelahanka
-  [13.0075, 77.5946, 0.70],  // Hebbal flyover
-
-  // West
-  [12.9516, 77.5387, 0.60],  // Yeshwanthpur
-  [12.9279, 77.5537, 0.65],  // Rajajinagar
-
-  // South
-  [12.8956, 77.5849, 0.70],  // Bannerghatta Road
-  [12.8742, 77.6101, 0.60],  // Electronic City Phase 2
-];
-
-// Named zones for overlay labels
-const ZONE_MARKERS = [
-  { lat: 12.9170, lng: 77.6101, label: "Silk Board", risk: "CRITICAL", color: "#ef4444" },
-  { lat: 12.9539, lng: 77.6374, label: "Marathahalli", risk: "HIGH", color: "#f97316" },
-  { lat: 12.9716, lng: 77.7480, label: "Whitefield", risk: "HIGH", color: "#f97316" },
-  { lat: 12.9767, lng: 77.5713, label: "MG Road", risk: "HIGH", color: "#f97316" },
-  { lat: 12.9698, lng: 77.6499, label: "KR Puram", risk: "HIGH", color: "#f97316" },
-  { lat: 13.0075, lng: 77.5946, label: "Hebbal", risk: "MODERATE", color: "#eab308" },
-  { lat: 12.9141, lng: 77.6101, label: "Electronic City", risk: "MODERATE", color: "#eab308" },
+// Replicated Bengaluru severity zones from screenshot
+const SEVERITY_ZONES = [
+  {
+    id: "zone-0",
+    name: "Zone 0",
+    lat: 12.9850,
+    lng: 77.5550,
+    radius: 1600,
+    color: "#dc2626", // Red border
+    fillColor: "#ef4444", // Red fill
+    textColor: "#ffffff",
+    risk: "CRITICAL",
+  },
+  {
+    id: "zone-5",
+    name: "Zone 5",
+    lat: 12.9680,
+    lng: 77.5950,
+    radius: 2000,
+    color: "#dc2626", // Red border
+    fillColor: "#ef4444", // Red fill
+    textColor: "#ffffff",
+    risk: "CRITICAL",
+  },
+  {
+    id: "zone-1",
+    name: "Zone 1",
+    lat: 12.9600,
+    lng: 77.6480,
+    radius: 1500,
+    color: "#ea580c", // Orange border
+    fillColor: "#f97316", // Orange fill
+    textColor: "#ffffff",
+    risk: "HIGH",
+  },
+  {
+    id: "zone-2",
+    name: "Zone 2",
+    lat: 12.9140,
+    lng: 77.6100,
+    radius: 1400,
+    color: "#ea580c", // Orange border
+    fillColor: "#f97316", // Orange fill
+    textColor: "#ffffff",
+    risk: "HIGH",
+  },
+  {
+    id: "zone-4",
+    name: "Zone 4",
+    lat: 13.0620,
+    lng: 77.5850,
+    radius: 1200,
+    color: "#ca8a04", // Yellow border
+    fillColor: "#eab308", // Yellow fill
+    textColor: "#ffffff",
+    risk: "MODERATE",
+  },
+  {
+    id: "zone-3",
+    name: "Zone 3",
+    lat: 13.1400,
+    lng: 77.6100,
+    radius: 1800,
+    color: "#16a34a", // Green border
+    fillColor: "#22c55e", // Green fill
+    textColor: "#ffffff",
+    risk: "LOW",
+  },
 ];
 
 interface Props {
@@ -75,92 +99,62 @@ export function BengaluruHeatmap({ className = "" }: Props) {
         shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
       });
 
-      // Initialize map centered on Bengaluru
+      // Initialize map centered on Bengaluru to capture all zones
       const map = L.map(mapRef.current!, {
-        center: [12.9716, 77.5946],
+        center: [12.9780, 77.5980],
         zoom: 11,
         zoomControl: true,
         attributionControl: true,
       });
 
-      // CartoDB dark matter tiles — free, no API key, matches BTP command center aesthetic
+      // Standard OpenStreetMap tiles (light theme matching screenshots)
       L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
         {
           attribution:
-            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-          subdomains: "abcd",
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
           maxZoom: 19,
         }
       ).addTo(map);
 
-      // Save a reference to window.L to satisfy Leaflet plugins
+      // Save L globally for plugins if needed
       (window as any).L = L;
 
-      // Add heatmap layer using leaflet.heat
-      // Dynamic import since leaflet.heat extends L at runtime
-      import("leaflet.heat").then(() => {
-        const heat = (L as any).heatLayer(VIOLATION_HOTSPOTS, {
-          radius: 35,
-          blur: 25,
-          maxZoom: 13,
-          max: 1.0,
-          gradient: {
-            0.0: "#22c55e",   // green — low risk
-            0.4: "#eab308",   // yellow — moderate
-            0.6: "#f97316",   // orange — high
-            0.8: "#ef4444",   // red — critical
-            1.0: "#dc2626",   // dark red — extreme
-          },
-        });
-        heat.addTo(map);
-      });
+      // Add circles and labels for severity zones
+      SEVERITY_ZONES.forEach((zone) => {
+        // Draw severity circle overlay
+        L.circle([zone.lat, zone.lng], {
+          radius: zone.radius,
+          color: zone.color,
+          fillColor: zone.fillColor,
+          fillOpacity: 0.28,
+          weight: 2,
+        }).addTo(map);
 
-      // Add zone marker labels
-      ZONE_MARKERS.forEach(({ lat, lng, label, risk, color }) => {
+        // Add custom rounded pill label centered on the zone coordinate
         const icon = L.divIcon({
           className: "",
           html: `
             <div style="
-              background: ${color};
-              color: white;
-              padding: 4px 10px;
-              border-radius: 4px;
-              font-size: 11px;
+              background: ${zone.fillColor};
+              color: ${zone.textColor};
+              padding: 5px 12px;
+              border-radius: 6px;
+              font-size: 12px;
               font-weight: 700;
               font-family: Inter, sans-serif;
+              border: 1px solid ${zone.color};
+              box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+              text-align: center;
               white-space: nowrap;
-              box-shadow: 0 2px 8px rgba(0,0,0,0.6);
-              border: 1px solid rgba(255,255,255,0.2);
-              letter-spacing: 0.03em;
             ">
-              ${label}
-              <span style="opacity:0.8; font-size:9px; margin-left:4px;">${risk}</span>
+              ${zone.name}
             </div>
           `,
-          iconAnchor: [0, 0],
+          iconAnchor: [28, 12],
         });
-        L.marker([lat, lng], { icon }).addTo(map);
+        L.marker([zone.lat, zone.lng], { icon }).addTo(map);
       });
-
-      // ORR corridor highlight line
-      const orrCoords: [number, number][] = [
-        [12.9170, 77.6101], // Silk Board
-        [12.9352, 77.6245], // HSR Layout
-        [12.9539, 77.6374], // Marathahalli
-        [12.9698, 77.6499], // KR Puram
-      ];
-      L.polyline(orrCoords, {
-        color: "#ef4444",
-        weight: 3,
-        opacity: 0.8,
-        dashArray: "8, 4",
-      })
-        .addTo(map)
-        .bindTooltip("ORR Corridor — Highest Violation Density", {
-          permanent: false,
-          className: "leaflet-tooltip-dark",
-        });
 
       mapInstanceRef.current = map;
     });
@@ -194,7 +188,7 @@ export function BengaluruHeatmap({ className = "" }: Props) {
           position: "absolute",
           bottom: "24px",
           right: "12px",
-          background: "rgba(17, 24, 39, 0.92)",
+          background: "rgba(17, 24, 39, 0.95)",
           border: "1px solid #1f2937",
           borderRadius: "8px",
           padding: "12px 16px",
@@ -206,22 +200,21 @@ export function BengaluruHeatmap({ className = "" }: Props) {
         }}
       >
         <div style={{ fontWeight: 700, color: "#f9fafb", marginBottom: "8px", fontSize: "12px" }}>
-          VIOLATION DENSITY
+          SEVERITY ZONES
         </div>
         {[
-          { color: "#dc2626", label: "Critical" },
-          { color: "#ef4444", label: "High" },
-          { color: "#f97316", label: "Moderate" },
-          { color: "#eab308", label: "Low" },
-          { color: "#22c55e", label: "Minimal" },
+          { color: "#ef4444", label: "Critical (Zone 0, 5)" },
+          { color: "#f97316", label: "High (Zone 1, 2)" },
+          { color: "#eab308", label: "Moderate (Zone 4)" },
+          { color: "#22c55e", label: "Low (Zone 3)" },
         ].map(({ color, label }) => (
           <div key={label} style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
             <div style={{ width: "12px", height: "12px", borderRadius: "50%", background: color, flexShrink: 0 }} />
-            <span>{label}</span>
+            <span style={{ color: "#f9fafb" }}>{label}</span>
           </div>
         ))}
-        <div style={{ marginTop: "8px", paddingTop: "8px", borderTop: "1px solid #1f2937", color: "#6b7280", fontSize: "10px" }}>
-          Based on BTP violation data 2023–25
+        <div style={{ marginTop: "8px", paddingTop: "8px", borderTop: "1px solid #1f2937", color: "#9ca3af", fontSize: "10px" }}>
+          BTP composite violation index
         </div>
       </div>
 
@@ -242,9 +235,8 @@ export function BengaluruHeatmap({ className = "" }: Props) {
           fontWeight: 600,
         }}
       >
-        ⚠ ORR CORRIDOR — 8–10 lakh daily users
+        ⚠ DRISHTI Traffic Monitoring Zones
       </div>
     </div>
   );
 }
-
