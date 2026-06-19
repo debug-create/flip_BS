@@ -152,7 +152,7 @@ drishti/
 │   ├── main.py                    # FastAPI app + routes
 │   ├── pipeline/
 │   │   ├── __init__.py
-│   │   ├── preprocess.py
+│   │   ├── preprocess.py 
 │   │   ├── detect.py              # 3-model Roboflow pipeline
 │   │   ├── ocr.py                 # EasyOCR plate reader
 │   │   ├── annotate.py            # Draw boxes on images
@@ -256,6 +256,8 @@ Monospace:      JetBrains Mono
 - [x] Frontend: Evidence Log wired to session store
 - [x] Frontend: Analytics wired to live violation breakdown
 - [x] Frontend: Real Leaflet.js heatmap on Command Center + Hotspots
+- [x] Frontend: Dynamic loading of Leaflet in browser to fix SSR `window is not defined` crash
+- [x] Frontend: Wired `/debug/models` to real-time status cards on System Status page
 - [x] Frontend: api.ts + evidenceStore + types
 - [x] Integration: Frontend ↔ Backend fully wired
 - [x] Model: Colab training notebook created
@@ -297,7 +299,8 @@ Monospace:      JetBrains Mono
 6. Switch to **Evidence Log** → table entry → click VIEW → modal with full JSON
 7. Switch to **Analytics** → bar chart of violations, stat cards
 8. Switch to **Hotspots** → Leaflet heatmap with BTP hotspot data
-9. (Optional) Upload a short video clip → show frame-by-frame timeline
+9. Switch to **System Status** → check live connectivity checks of individual Roboflow models (Vehicle, Helmet, Plate)
+10. (Optional) Upload a short video clip → show frame-by-frame timeline
 
 ---
 
@@ -315,7 +318,7 @@ Monospace:      JetBrains Mono
 | Sample images | `drishti-backend/sample_images/` |
 | GitHub | https://github.com/debug-create/flip_BS |
 | Backend URL | http://localhost:8000 |
-| Frontend URL | http://localhost:5173 |
+| Frontend URL | http://localhost:8081 |
 
 ---
 
@@ -339,6 +342,11 @@ Monospace:      JetBrains Mono
 - Updated Command Center (index.tsx) and Hotspots (hotspots.tsx) pages
 - Added Leaflet CSS overrides to styles.css
 
+### Session 4: June 19, 2026 — Night (Latest Updates)
+- Fixed Leaflet SSR crash: wrapped Leaflet module imports dynamically inside `useEffect` in `BengaluruHeatmap.tsx` to prevent `window is not defined` crashes.
+- Wired `/debug/models` endpoint: added `getDebugModels` in `api.ts`, updated `types.ts`, and completely rebuilt the `System Status` page (`system.tsx`) to show real-time connectivity status for the three Roboflow models (Vehicle, Helmet, and Plate) individually.
+- Resolved Python dependency loading mismatch: identified that the system had multiple Python environments (3.13 and 3.14). Forced backend startup under Python 3.14 to utilize installed ML packages (`cv2`, `easyocr`).
+
 ---
-*Last updated: June 19, 2026 — 9:45 PM IST*
+*Last updated: June 19, 2026 — 11:25 PM IST*
 *Next: test with real images → raise thresholds → prep for demo*

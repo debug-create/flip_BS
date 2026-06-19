@@ -52,3 +52,21 @@ export interface ViolationTypeInfo {
   name: string;
   description: string;
 }
+
+export interface ModelStatus {
+  model_id: string;
+  status: string;
+  test_predictions?: number;
+  error?: string;
+}
+
+export interface DebugModelsResponse {
+  api_key_preview: string;
+  roboflow_url: string;
+  models: {
+    vehicle: ModelStatus;
+    helmet: ModelStatus;
+    plate: ModelStatus;
+  };
+}
+

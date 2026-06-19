@@ -3,6 +3,7 @@ import type {
   HealthResponse,
   VideoAnalysisResult,
   ViolationTypeInfo,
+  DebugModelsResponse,
 } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -38,10 +39,16 @@ export async function getHealth(): Promise<HealthResponse> {
   return handleResponse<HealthResponse>(response);
 }
 
+export async function getDebugModels(): Promise<DebugModelsResponse> {
+  const response = await fetch(`${API_BASE}/debug/models`);
+  return handleResponse<DebugModelsResponse>(response);
+}
+
 export async function getViolationTypes(): Promise<ViolationTypeInfo[]> {
   const response = await fetch(`${API_BASE}/violations/types`);
   return handleResponse<ViolationTypeInfo[]>(response);
 }
+
 
 export async function analyzeImage(file: File): Promise<EvidencePackage> {
   const formData = new FormData();

@@ -1,14 +1,5 @@
-import { useEffect, useRef } from "react";
-import L from "leaflet";
+import { useEffect, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
-
-// Fix Leaflet default icon paths broken by Vite
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
 
 // Bengaluru violation hotspot data
 // Format: [lat, lng, intensity]
@@ -62,96 +53,117 @@ interface Props {
 
 export function BengaluruHeatmap({ className = "" }: Props) {
   const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<L.Map | null>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    if (!mapRef.current || mapInstanceRef.current) return;
+    setIsMounted(true);
+  }, []);
 
-    // Initialize map centered on Bengaluru
-    const map = L.map(mapRef.current, {
-      center: [12.9716, 77.5946],
-      zoom: 11,
-      zoomControl: true,
-      attributionControl: true,
-    });
+  useEffect(() => {
+    if (!isMounted || !mapRef.current || mapInstanceRef.current) return;
 
-    // CartoDB dark matter tiles — free, no API key, matches BTP command center aesthetic
-    L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-      {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: "abcd",
-        maxZoom: 19,
-      }
-    ).addTo(map);
+    // Dynamically import Leaflet so it only loads in the browser
+    import("leaflet").then((LModule) => {
+      const L = LModule.default;
 
-    // Add heatmap layer using leaflet.heat
-    // Dynamic import since leaflet.heat extends L at runtime
-    import("leaflet.heat").then(() => {
-      const heat = (L as any).heatLayer(VIOLATION_HOTSPOTS, {
-        radius: 35,
-        blur: 25,
-        maxZoom: 13,
-        max: 1.0,
-        gradient: {
-          0.0: "#22c55e",   // green — low risk
-          0.4: "#eab308",   // yellow — moderate
-          0.6: "#f97316",   // orange — high
-          0.8: "#ef4444",   // red — critical
-          1.0: "#dc2626",   // dark red — extreme
-        },
-      });
-      heat.addTo(map);
-    });
-
-    // Add zone marker labels
-    ZONE_MARKERS.forEach(({ lat, lng, label, risk, color }) => {
-      const icon = L.divIcon({
-        className: "",
-        html: `
-          <div style="
-            background: ${color};
-            color: white;
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 700;
-            font-family: Inter, sans-serif;
-            white-space: nowrap;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.6);
-            border: 1px solid rgba(255,255,255,0.2);
-            letter-spacing: 0.03em;
-          ">
-            ${label}
-            <span style="opacity:0.8; font-size:9px; margin-left:4px;">${risk}</span>
-          </div>
-        `,
-        iconAnchor: [0, 0],
-      });
-      L.marker([lat, lng], { icon }).addTo(map);
-    });
-
-    // ORR corridor highlight line
-    const orrCoords: [number, number][] = [
-      [12.9170, 77.6101], // Silk Board
-      [12.9352, 77.6245], // HSR Layout
-      [12.9539, 77.6374], // Marathahalli
-      [12.9698, 77.6499], // KR Puram
-    ];
-    L.polyline(orrCoords, {
-      color: "#ef4444",
-      weight: 3,
-      opacity: 0.8,
-      dashArray: "8, 4",
-    })
-      .addTo(map)
-      .bindTooltip("ORR Corridor — Highest Violation Density", {
-        permanent: false,
-        className: "leaflet-tooltip-dark",
+      // Fix Leaflet default icon paths broken by Vite
+      delete (L.Icon.Default.prototype as any)._getIconUrl;
+      L.Icon.Default.mergeOptions({
+        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+        shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
       });
 
-    mapInstanceRef.current = map;
+      // Initialize map centered on Bengaluru
+      const map = L.map(mapRef.current!, {
+        center: [12.9716, 77.5946],
+        zoom: 11,
+        zoomControl: true,
+        attributionControl: true,
+      });
+
+      // CartoDB dark matter tiles — free, no API key, matches BTP command center aesthetic
+      L.tileLayer(
+        "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        {
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+          subdomains: "abcd",
+          maxZoom: 19,
+        }
+      ).addTo(map);
+
+      // Save a reference to window.L to satisfy Leaflet plugins
+      (window as any).L = L;
+
+      // Add heatmap layer using leaflet.heat
+      // Dynamic import since leaflet.heat extends L at runtime
+      import("leaflet.heat").then(() => {
+        const heat = (L as any).heatLayer(VIOLATION_HOTSPOTS, {
+          radius: 35,
+          blur: 25,
+          maxZoom: 13,
+          max: 1.0,
+          gradient: {
+            0.0: "#22c55e",   // green — low risk
+            0.4: "#eab308",   // yellow — moderate
+            0.6: "#f97316",   // orange — high
+            0.8: "#ef4444",   // red — critical
+            1.0: "#dc2626",   // dark red — extreme
+          },
+        });
+        heat.addTo(map);
+      });
+
+      // Add zone marker labels
+      ZONE_MARKERS.forEach(({ lat, lng, label, risk, color }) => {
+        const icon = L.divIcon({
+          className: "",
+          html: `
+            <div style="
+              background: ${color};
+              color: white;
+              padding: 4px 10px;
+              border-radius: 4px;
+              font-size: 11px;
+              font-weight: 700;
+              font-family: Inter, sans-serif;
+              white-space: nowrap;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+              border: 1px solid rgba(255,255,255,0.2);
+              letter-spacing: 0.03em;
+            ">
+              ${label}
+              <span style="opacity:0.8; font-size:9px; margin-left:4px;">${risk}</span>
+            </div>
+          `,
+          iconAnchor: [0, 0],
+        });
+        L.marker([lat, lng], { icon }).addTo(map);
+      });
+
+      // ORR corridor highlight line
+      const orrCoords: [number, number][] = [
+        [12.9170, 77.6101], // Silk Board
+        [12.9352, 77.6245], // HSR Layout
+        [12.9539, 77.6374], // Marathahalli
+        [12.9698, 77.6499], // KR Puram
+      ];
+      L.polyline(orrCoords, {
+        color: "#ef4444",
+        weight: 3,
+        opacity: 0.8,
+        dashArray: "8, 4",
+      })
+        .addTo(map)
+        .bindTooltip("ORR Corridor — Highest Violation Density", {
+          permanent: false,
+          className: "leaflet-tooltip-dark",
+        });
+
+      mapInstanceRef.current = map;
+    });
 
     return () => {
       if (mapInstanceRef.current) {
@@ -159,7 +171,18 @@ export function BengaluruHeatmap({ className = "" }: Props) {
         mapInstanceRef.current = null;
       }
     };
-  }, []);
+  }, [isMounted]);
+
+  if (!isMounted) {
+    return (
+      <div
+        className={`relative bg-[#111827] animate-pulse rounded-xl border border-[#1f2937] flex items-center justify-center ${className}`}
+        style={{ minHeight: "480px" }}
+      >
+        <span className="text-[#9ca3af] font-semibold text-sm">Loading map components...</span>
+      </div>
+    );
+  }
 
   return (
     <div className={`relative ${className}`}>
@@ -224,3 +247,4 @@ export function BengaluruHeatmap({ className = "" }: Props) {
     </div>
   );
 }
+

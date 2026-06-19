@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Panel, PageHeader } from "@/components/ui-bits";
 import { useQuery } from "@tanstack/react-query";
-import { getHealth } from "@/lib/api";
+import { getHealth, getDebugModels } from "@/lib/api";
 import { useEvidence } from "@/lib/evidenceStore";
 import { getAnalyticsStats } from "@/lib/analytics";
 import { CheckCircle2, AlertTriangle, XCircle, Cpu } from "lucide-react";
@@ -17,10 +17,18 @@ function System() {
     queryFn: getHealth,
     refetchInterval: 15_000,
   });
+
   const { evidenceLog } = useEvidence();
   const stats = getAnalyticsStats(evidenceLog);
 
   const backendOk = !isError && health?.status === "ok";
+
+  const { data: debugModels, isLoading: isModelsLoading, isError: isModelsError } = useQuery({
+    queryKey: ["debugModels"],
+    queryFn: getDebugModels,
+    refetchInterval: 60_000, // 1 minute to avoid rate-limiting Roboflow quota
+    enabled: backendOk,
+  });
 
   const statusCards = [
     {
@@ -30,21 +38,75 @@ function System() {
       detail: health ? `${health.model} · ${health.mode}` : "Cannot reach localhost:8000",
     },
     {
-      name: "Model Health",
-      status: backendOk ? "healthy" : "unhealthy",
-      value: health?.model ?? "—",
-      detail: "Roboflow 3-model pipeline",
+      name: "Vehicle Model",
+      status: !backendOk || isModelsError
+        ? "unhealthy"
+        : isModelsLoading
+        ? "degraded"
+        : debugModels?.models?.vehicle?.status === "ok"
+        ? "healthy"
+        : "unhealthy",
+      value: !backendOk
+        ? "OFFLINE"
+        : isModelsError
+        ? "ERROR"
+        : isModelsLoading
+        ? "CHECKING..."
+        : debugModels?.models?.vehicle?.status === "ok"
+        ? "CONNECTED"
+        : "ERROR",
+      detail: debugModels?.models?.vehicle?.model_id ?? "vehicle-detection-3mmwj/8",
+    },
+    {
+      name: "Helmet Model",
+      status: !backendOk || isModelsError
+        ? "unhealthy"
+        : isModelsLoading
+        ? "degraded"
+        : debugModels?.models?.helmet?.status === "ok"
+        ? "healthy"
+        : "unhealthy",
+      value: !backendOk
+        ? "OFFLINE"
+        : isModelsError
+        ? "ERROR"
+        : isModelsLoading
+        ? "CHECKING..."
+        : debugModels?.models?.helmet?.status === "ok"
+        ? "CONNECTED"
+        : "ERROR",
+      detail: debugModels?.models?.helmet?.model_id ?? "helmet-detection-ligfk/4",
+    },
+    {
+      name: "Plate Model",
+      status: !backendOk || isModelsError
+        ? "unhealthy"
+        : isModelsLoading
+        ? "degraded"
+        : debugModels?.models?.plate?.status === "ok"
+        ? "healthy"
+        : "unhealthy",
+      value: !backendOk
+        ? "OFFLINE"
+        : isModelsError
+        ? "ERROR"
+        : isModelsLoading
+        ? "CHECKING..."
+        : debugModels?.models?.plate?.status === "ok"
+        ? "CONNECTED"
+        : "ERROR",
+      detail: debugModels?.models?.plate?.model_id ?? "license-plate-recognition-rxg4e/11",
     },
     {
       name: "OCR Engine",
-      status: "healthy",
-      value: stats.avgOcrConfidence > 0 ? `${stats.avgOcrConfidence}%` : "Ready",
+      status: backendOk ? "healthy" : "unhealthy",
+      value: backendOk ? (stats.avgOcrConfidence > 0 ? `${stats.avgOcrConfidence}%` : "Ready") : "OFFLINE",
       detail: "EasyOCR · CPU",
     },
     {
       name: "Inference Latency",
-      status: "healthy",
-      value: stats.avgInferenceMs > 0 ? `${stats.avgInferenceMs} ms` : "—",
+      status: backendOk ? "healthy" : "unhealthy",
+      value: backendOk ? (stats.avgInferenceMs > 0 ? `${stats.avgInferenceMs} ms` : "—") : "OFFLINE",
       detail: "session average",
     },
     {
