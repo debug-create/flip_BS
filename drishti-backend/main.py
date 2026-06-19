@@ -152,6 +152,18 @@ def _run_image_pipeline(image: np.ndarray, source_filename: str) -> dict[str, An
             else:
                 det["plate"] = {"plate_text": "UNDETECTED", "confidence": 0.0, "raw_ocr": ""}
 
+        # Flag missing/undetected plates as violations
+        # Only flag UNDETECTED (plate model found nothing)
+        # NOT UNREADABLE (plate found but OCR failed — could be angle/blur)
+        for det in detections:
+            plate = det.get("plate") or {}
+            plate_text = plate.get("plate_text", "")
+
+            if not det["is_violation"] and plate_text == "UNDETECTED":
+                det["is_violation"] = True
+                det["violation_type"] = "Defective/Missing Plate"
+                det["violation_confidence"] = 0.75
+
         plates = [det["plate"] for det in detections]
         annotated = annotate_image(image, detections, plates)
         inference_time_ms = (time.perf_counter() - start) * 1000

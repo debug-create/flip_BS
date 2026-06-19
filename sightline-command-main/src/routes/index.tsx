@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Panel, StatCard, RiskBadge, PageHeader } from "@/components/ui-bits";
-import { CityMap } from "@/components/CityMap";
+import { BengaluruHeatmap } from "@/components/BengaluruHeatmap";
 import {
   AI_RECOMMENDATIONS, KPI, REPEAT_OFFENDERS, TOP_JUNCTIONS, formatTime,
 } from "@/lib/mockData";
@@ -68,7 +68,7 @@ function CommandCenter() {
             </div>
           }
         >
-          <div className="p-3 h-full"><CityMap /></div>
+          <div className="p-3 h-full"><BengaluruHeatmap className="rounded-xl overflow-hidden border border-[#1f2937] h-full" /></div>
         </Panel>
 
         <div className="col-span-12 xl:col-span-5 flex flex-col gap-4 h-[620px]">

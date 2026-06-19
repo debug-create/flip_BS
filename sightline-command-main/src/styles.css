@@ -178,3 +178,18 @@
   border-radius: 9999px;
   display: inline-block;
 }
+
+/* Dark tooltip for Leaflet */
+.leaflet-tooltip-dark {
+  background: #111827;
+  border: 1px solid #1f2937;
+  color: #f9fafb;
+  font-family: Inter, sans-serif;
+  font-size: 11px;
+}
+
+/* Hide Leaflet attribution branding slightly */
+.leaflet-control-attribution {
+  font-size: 9px;
+  opacity: 0.5;
+}

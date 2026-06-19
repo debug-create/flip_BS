@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Panel, PageHeader, RiskBadge } from "@/components/ui-bits";
-import { CityMap } from "@/components/CityMap";
+import { BengaluruHeatmap } from "@/components/BengaluruHeatmap";
 import { HOTSPOTS, AI_RECOMMENDATIONS, OFFICER_DEPLOYMENT, AI_FORECAST } from "@/lib/mockData";
 import { Brain, Flame, ShieldAlert, Users, ArrowUpRight, TrendingUp } from "lucide-react";
 
@@ -48,7 +48,7 @@ function Hotspots() {
 
       <div className="grid grid-cols-12 gap-4">
         <Panel title="Predictive Risk Heatmap" subtitle="Current + T+30min + T+60min overlay" icon={Flame} code="HEAT-PRD" className="col-span-12 xl:col-span-8 h-[560px]">
-          <div className="p-3 h-full"><CityMap /></div>
+          <div className="p-3 h-full"><BengaluruHeatmap className="rounded-xl overflow-hidden border border-[#1f2937] h-full" /></div>
         </Panel>
 
         <Panel title="Predicted Hotspots" subtitle="Sorted by composite risk score" icon={ShieldAlert} code="HTSP-RNK" className="col-span-12 xl:col-span-4 h-[560px]">
