@@ -1,0 +1,310 @@
+DRISHTI Frontend ↔ Backend Integration Execution Document
+Project
+DRISHTI – AI-Powered Traffic Violation Intelligence Platform
+Purpose: Connect the completed React frontend dashboard with the FastAPI backend and replace all mock data with live API responses.
+
+Backend Information
+Backend URL (Local)
+http://localhost:8000
+Swagger Docs
+http://localhost:8000/docs
+Frontend URL
+http://localhost:5173
+Authentication
+None
+Storage
+Frontend-managed session state
+
+Available Backend Endpoints
+GET /health
+Purpose:Backend status monitoring.
+Returns:
+status
+model
+mode
+Frontend Usage:
+Backend Status Card
+Model Status Card
+Demo Mode Badge
+
+GET /violations/types
+Purpose:Returns supported violation categories.
+Frontend Usage:
+Filters
+Dropdowns
+Analytics Labels
+Legends
+Violation Types:
+Helmet Non-Compliance
+Seatbelt Non-Compliance
+Triple Riding
+Wrong-Side Driving
+Stop-Line Violation
+Red-Light Running
+Illegal Parking
+Defective/Missing Plate
+
+POST /analyze/image
+Purpose:Analyze uploaded traffic image.
+Input:
+multipart/form-data
+Field Name:
+file
+Supported Formats:
+jpg
+jpeg
+png
+webp
+Maximum Size:
+50 MB
+Returns:
+evidence_id
+timestamp
+source
+summary
+detections
+annotated_image_b64
+processing_metadata
+Frontend Usage:
+Analyze Page
+
+POST /analyze/video
+Purpose:Analyze uploaded traffic video.
+Input:
+multipart/form-data
+Field Name:
+file
+Supported Formats:
+mp4
+avi
+Maximum Size:
+50 MB
+Maximum Duration:
+30 seconds
+Returns:
+total_frames_analyzed
+total_violations_found
+violation_timeline
+aggregate_violation_breakdown
+Frontend Usage:
+Video Analysis Module
+
+Command Center Integration
+Component:
+Command Center Dashboard
+Required Endpoint:
+GET /health
+Tasks:
+Call endpoint when dashboard loads.
+Update:
+Backend Status
+Model Status
+System Health
+Display Demo Mode badge if returned.
+Display Online or Offline state.
+Expected Result:
+Dashboard always reflects backend availability.
+
+Analyze Page Integration
+Component:
+Analyze Page
+Required Endpoint:
+POST /analyze/image
+Tasks:
+Upload image.
+Send image using field name:
+file
+Show loading state.
+Disable upload button while processing.
+Receive response.
+Display:
+Original Image
+Annotated Image
+Display:
+Vehicle Type
+Violation Type
+Confidence
+Plate Number
+Display:
+Evidence ID
+Timestamp
+Inference Time
+Expected Result:
+Complete image analysis workflow.
+
+Annotated Image Rendering
+Backend returns:
+annotated_image_b64
+Convert to:
+data:image/jpeg;base64,
+Display in Analyze Page.
+Expected Result:
+Annotated detections visible to user.
+
+Detection Results Table
+Display:
+Detection ID
+Vehicle Class
+Violation Type
+Confidence Score
+Plate Number
+Rules:
+Violation:
+Red Badge
+Non-Violation:
+Green Badge
+Expected Result:
+Clear detection summary.
+
+OCR Integration
+Use:
+plate.plate_text
+Display:
+Plate Number
+If OCR fails:
+Display:
+UNREADABLE
+Expected Result:
+Readable plate output for evidence generation.
+
+Evidence Log Integration
+Current Status:
+Uses mock data.
+Required:
+Store every successful analysis result.
+Fields:
+evidence_id
+timestamp
+source
+violations
+plate numbers
+Display:
+Evidence Log Table
+Actions:
+View Details
+Export JSON
+Expected Result:
+Persistent session evidence history.
+
+Analytics Integration
+Current Status:
+Mock data.
+Required:
+Generate charts using actual backend responses.
+Use:
+summary.violation_breakdown
+Create:
+Violation Breakdown
+Violation Trends
+Top Violations
+Junction Statistics
+Update automatically whenever new evidence is added.
+Expected Result:
+Live analytics dashboard.
+
+Violation Types Integration
+Endpoint:
+GET /violations/types
+Tasks:
+Populate:
+Filters
+Dropdowns
+Analytics Labels
+Legends
+Do not hardcode values.
+Expected Result:
+Backend-driven configuration.
+
+Video Analysis Integration
+Component:
+Video Analysis
+Endpoint:
+POST /analyze/video
+Tasks:
+Upload video.
+Display processing state.
+Display:
+Total Frames
+Total Violations
+Timeline
+Display aggregate violation breakdown.
+Expected Result:
+Complete video workflow.
+
+Error Handling
+Handle:
+413
+File Too Large
+415
+Unsupported Format
+500
+Backend Failure
+Display:
+Human-readable messages.
+Do not expose stack traces.
+Expected Result:
+Stable demo experience.
+
+Loading States
+Required Loading Screens:
+Uploading File
+Analyzing Traffic Scene
+Running OCR
+Generating Evidence
+Processing Complete
+Expected Result:
+Professional user experience.
+
+Frontend State Requirements
+Store:
+evidenceLog
+Purpose:
+Evidence History
+Store:
+analytics
+Purpose:
+Dashboard Charts
+After every successful analysis:
+Add evidence to evidenceLog.
+Recalculate analytics.
+Refresh charts.
+Expected Result:
+Automatic dashboard updates.
+
+Testing Checklist
+Verify:
+Backend Starts
+Swagger Opens
+Health Endpoint Works
+Image Upload Works
+Video Upload Works
+Annotated Image Displays
+OCR Displays Correctly
+Evidence Log Updates
+Analytics Updates
+Error Handling Works
+No Frontend Crashes
+
+End-to-End Demo Flow
+Open Dashboard
+Verify Backend Online
+Upload Traffic Image
+Backend Analysis Runs
+OCR Runs
+Violations Detected
+Annotated Image Generated
+Evidence Log Updated
+Analytics Updated
+Results Displayed Successfully
+Expected Outcome:
+Fully functional DRISHTI demo suitable for Gridlock Hackathon judging.
+
+Final Deliverable
+A fully integrated DRISHTI platform where:
+Frontend consumes live backend APIs
+All mock data is removed
+Evidence generation works
+OCR works
+Analytics work
+Dashboard reflects real detections
+Demo flow is stable and presentation-ready

@@ -66,11 +66,11 @@ No new hardware required. Augments ASTraM + BATCS, doesn't replace them.
 - NO auth (hackathon demo)
 
 ### Frontend
-- React 18 + Vite
-- Tailwind CSS v3 (dark theme)
+- React 19 + Vite + TanStack Router (in `sightline-command-main/`)
+- Tailwind CSS v4 (dark theme)
 - Recharts
-- Plain JS (no TypeScript)
-- No react-router (single page, view managed by state)
+- TypeScript
+- Session evidence state via `EvidenceProvider` + sessionStorage
 
 ### Model Training (separate, not in main repo)
 - **Colab notebook:** `training/DRISHTI_YOLOv8_Training.ipynb` (Roboflow → merge → train → export)
@@ -99,28 +99,15 @@ drishti/
 │   ├── requirements.txt
 │   └── README.md
 │
-├── drishti-frontend/
+├── sightline-command-main/   # Frontend dashboard (TanStack Start)
 │   ├── src/
-│   │   ├── App.jsx
-│   │   ├── components/
-│   │   │   ├── Header.jsx
-│   │   │   ├── Sidebar.jsx
-│   │   │   ├── views/
-│   │   │   │   ├── AnalyzeView.jsx
-│   │   │   │   ├── EvidenceLogView.jsx
-│   │   │   │   └── AnalyticsView.jsx
-│   │   │   ├── UploadZone.jsx
-│   │   │   ├── ResultsPanel.jsx
-│   │   │   ├── EvidenceModal.jsx
-│   │   │   └── StatCard.jsx
-│   │   ├── utils/
-│   │   │   ├── api.js
-│   │   │   └── formatters.js
-│   │   ├── index.css
-│   │   └── main.jsx
-│   ├── vite.config.js
-│   ├── tailwind.config.js
-│   └── package.json
+│   │   ├── lib/api.ts        # Backend API client
+│   │   ├── lib/evidenceStore.tsx
+│   │   ├── routes/analyze.tsx
+│   │   ├── routes/evidence.tsx
+│   │   ├── routes/analytics.tsx
+│   │   └── ...
+│   └── .env.example
 │
 └── context.md               # Project context (read first each session)
 ```
@@ -194,7 +181,7 @@ Output:
 ```
 
 ### GET /health
-Output: `{"status": "ok", "model": "YOLOv8n", "mode": "DEMO"}`
+Output: `{"status": "ok", "model": "roboflow-3model", "mode": "PRODUCTION"}`
 
 ### GET /violations/types
 Output: list of 8 violation type objects with name + description
@@ -238,20 +225,19 @@ Font:           Inter (Google Fonts)
 ### Completed
 - [x] Backend: main.py + FastAPI routes
 - [x] Backend: pipeline/preprocess.py
-- [x] Backend: pipeline/detect.py (DEMO MODE with mock violations)
+- [x] Backend: pipeline/detect.py (Roboflow 3-model hosted inference)
 - [x] Backend: pipeline/ocr.py
 - [x] Backend: pipeline/annotate.py
 - [x] Backend: pipeline/evidence.py
-- [ ] Frontend: project scaffold (Vite + Tailwind)
-- [ ] Frontend: Header + Sidebar
-- [ ] Frontend: AnalyzeView (upload + results)
-- [ ] Frontend: EvidenceLogView (table + modal)
-- [ ] Frontend: AnalyticsView (charts + stat cards)
-- [ ] Frontend: api.js + formatters.js
-- [ ] Model: fine-tuned weights trained (drishti.pt)
+- [x] Frontend: project scaffold (`sightline-command-main/`)
+- [x] Frontend: Header + Sidebar (TopBar + AppSidebar)
+- [x] Frontend: Analyze page wired to `POST /analyze/image` + video
+- [x] Frontend: Evidence Log wired to session evidence store
+- [x] Frontend: Analytics wired to live violation breakdown
+- [x] Frontend: api.ts + evidenceStore + types
+- [ ] Model: fine-tuned weights trained (drishti.pt) — using Roboflow hosted instead
 - [x] Model: Colab training notebook created (`training/DRISHTI_YOLOv8_Training.ipynb`)
-- [x] Backend: `detect.py` supports fine-tuned `drishti.pt` class schema (no mock overlay)
-- [ ] Integration: frontend talking to backend successfully
+- [x] Integration: frontend talking to backend (Analyze, Evidence, Analytics, Health)
 - [ ] Demo: tested end-to-end with real Bengaluru traffic images
 
 ### Known Issues / TODOs
@@ -259,16 +245,17 @@ Font:           Inter (Google Fonts)
 - Backend uses Roboflow 3-model hosted inference + EasyOCR (Python 3.14 compatible)
 - Roboflow API key in `drishti-backend/.env` (copy from `.env.example`) — never commit `.env`
 - Teammates cloning the repo must run `copy .env.example .env` and add their own Roboflow key
-- DEMO MODE uses COCO yolov8n.pt + mock violation overlay until `models/drishti.pt` is trained
-- Run Colab notebook → download `drishti_best.pt` → save as `drishti-backend/models/drishti.pt`
-- Frontend integration guide created at `FRONTEND_INTEGRATION.md` — share with frontend teammate
+- Frontend in `sightline-command-main/` — copy `.env.example` to `.env` with `VITE_API_URL=http://localhost:8000`
+- Run frontend: `cd sightline-command-main && npm install && npm run dev`
+- Fleet / Hotspots pages still use mock data (out of scope for wiring doc)
 
 ### File Locations of Note
 > Add any non-obvious file paths, env vars, or config values here
 - Model weights go in: `drishti-backend/models/drishti.pt`
 - After training on Kaggle/Roboflow, download best.pt and rename to drishti.pt
 - Backend runs on: http://localhost:8000
-- Frontend runs on: http://localhost:5173
+- Frontend runs on: http://localhost:5173 (sightline-command-main)
+- **Wiring spec:** `DRISHTI wiring endpoints.docx` (root)
 - **Frontend ↔ Backend contract:** `FRONTEND_INTEGRATION.md` (root)
 - Backend README: `drishti-backend/README.md`
 - **Secrets:** `drishti-backend/.env` (gitignored) — see `.env.example`
@@ -304,5 +291,96 @@ Font:           Inter (Google Fonts)
 
 ---
 
-*Last updated: June 18, 2026 (Roboflow 3-model pipeline)*
-*Next session should start by reading this file and updating Completed checkboxes*
+## Session Changelog
+
+### Session: June 18, 2026 — Late Night (Antigravity AI)
+
+**Goal:** Improve error handling and add diagnostics to debug why the Roboflow pipeline returns detections but 0 violations on test images.
+
+#### Changes to `drishti-backend/pipeline/detect.py`
+- **Raw API response logging** in `_call_roboflow()` — every Roboflow call now logs:
+  - Image dimensions + buffer size before sending
+  - Full raw JSON response from Roboflow
+  - Prediction count returned
+- **Granular exception handling** — replaced single catch-all `except` with:
+  - `requests.exceptions.Timeout` (60s limit)
+  - `requests.exceptions.ConnectionError`
+  - `requests.exceptions.HTTPError` (logs status code + response body)
+  - Fallback with `type(e).__name__` for unexpected errors
+- **Lowered confidence thresholds (TEMPORARY for testing):**
+  - Vehicle detection: `0.35` → `0.15`
+  - Helmet detection: `0.35` → `0.15`
+  - Plate detection: `0.40` → `0.20`
+  - ⚠ **MUST raise back before demo day**
+- **Per-prediction diagnostic logging** — every vehicle, helmet, and plate prediction now logs class, confidence, and accept/skip reason
+
+#### Changes to `drishti-backend/main.py`
+- **`POST /debug/image`** — new route that returns raw Roboflow predictions for all 3 models without any pipeline processing. Also runs helmet model on two-wheeler crops and plate model on first 3 vehicles.
+- **`GET /debug/models`** — new route that smoke-tests all 3 Roboflow models with a tiny test image, reports API key preview + connectivity status.
+- ⚠ **Both debug routes must be removed before demo day**
+
+#### What was NOT changed
+- `pipeline/ocr.py`, `pipeline/annotate.py`, `pipeline/evidence.py` — untouched
+- Frontend — not started yet
+- Model weights — still using Roboflow hosted models
+
+---
+
+## How to Test Tonight
+
+### 1. Prerequisites
+```bash
+cd drishti-backend
+# Make sure .env exists with your Roboflow API key
+copy .env.example .env
+# Edit .env and add: ROBOFLOW_API_KEY=your_key_here
+```
+
+### 2. Install dependencies & start server
+```bash
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
+
+### 3. Quick smoke test — check all 3 models are reachable
+Open browser or run:
+```bash
+curl http://localhost:8000/debug/models
+```
+Expected: all 3 models show `"status": "ok"`
+
+### 4. Test with your image — raw debug output
+```bash
+curl -X POST http://localhost:8000/debug/image -F "file=@images.jpg"
+```
+This returns raw predictions from all 3 Roboflow models — no filtering. Check:
+- `vehicle_prediction_count` > 0?
+- `helmet_debug` → does the helmet model see riders?
+- `plate_debug` → does the plate model see plates?
+
+### 5. Test the actual pipeline
+```bash
+curl -X POST http://localhost:8000/analyze/image -F "file=@images.jpg"
+```
+Watch the **terminal logs** — you'll now see every prediction with its confidence and whether it was accepted or skipped.
+
+### 6. What to look for in logs
+```
+Roboflow [vehicle-detection-3mmwj/8] raw response: {...}
+Vehicle pred: class=motorcycle, conf=0.9709, raw={...}
+  -> ACCEPTED: bbox=[403, 158, 549, 356]
+Two-wheeler detected (motorcycle), running helmet check...
+Helmet crop size: 218x198
+Roboflow [helmet-detection-ligfk/4] raw response: {...}
+  Helmet pred: class=no-helmet, conf=0.8200
+```
+
+If helmet model returns 0 predictions → the crop might be too small or the model doesn't recognise the angle. If it returns predictions but all get skipped → thresholds are still too high.
+
+### 7. After confirming detections work
+Raise thresholds back in `detect.py`:
+- `conf < 0.15` → `conf < 0.35` (two places: vehicles + helmets)
+- `pconf < 0.20` → `pconf < 0.40` (plates)
+
+---
+*Last updated: June 19, 2026 — Frontend wired to backend (sightline-command-main)*

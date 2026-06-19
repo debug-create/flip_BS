@@ -266,3 +266,90 @@ async def analyze_video(file: UploadFile = File(...)) -> dict[str, Any]:
         "violation_timeline": timeline,
         "aggregate_violation_breakdown": aggregate_violation_breakdown(timeline),
     }
+
+
+# ---------------------------------------------------------------------------
+# DEBUG ROUTES — remove before production / demo day
+# ---------------------------------------------------------------------------
+
+@app.post("/debug/image")
+async def debug_image(file: UploadFile = File(...)) -> dict[str, Any]:
+    """Debug route — returns raw Roboflow predictions without post-processing."""
+    file_bytes = await file.read()
+    image = _decode_image(file_bytes)
+
+    det = get_detector()
+    h, w = image.shape[:2]
+
+    # Stage 1: raw vehicle predictions
+    from pipeline.detect import VEHICLE_MODEL, HELMET_MODEL, PLATE_MODEL
+
+    vehicle_raw = det._call_roboflow(image, VEHICLE_MODEL)
+
+    # Stage 2: run helmet model on first two-wheeler crop (if any)
+    helmet_debug = []
+    for vp in vehicle_raw:
+        cls = vp.get("class", "").lower()
+        is_tw = any(tw in cls for tw in ["motorcycle", "bike", "motorbike", "scooter", "two-wheeler"])
+        if is_tw:
+            bbox = det._pred_to_xyxy(vp)
+            crop, _, _ = det._crop_with_padding(image, bbox, pad=20)
+            if crop.size > 0:
+                helmet_raw = det._call_roboflow(crop, HELMET_MODEL)
+                helmet_debug.append({
+                    "parent_vehicle": vp,
+                    "crop_shape": list(crop.shape),
+                    "helmet_predictions": helmet_raw,
+                })
+
+    # Stage 3: run plate model on first vehicle crop
+    plate_debug = []
+    for vp in vehicle_raw[:3]:  # limit to first 3 to avoid timeouts
+        bbox = det._pred_to_xyxy(vp)
+        crop, _, _ = det._crop_with_padding(image, bbox, pad=5)
+        if crop.size > 0:
+            plate_raw = det._call_roboflow(crop, PLATE_MODEL)
+            plate_debug.append({
+                "parent_vehicle": vp,
+                "crop_shape": list(crop.shape),
+                "plate_predictions": plate_raw,
+            })
+
+    return {
+        "image_shape": [h, w, image.shape[2] if len(image.shape) > 2 else 1],
+        "vehicle_model": VEHICLE_MODEL,
+        "vehicle_raw_predictions": vehicle_raw,
+        "vehicle_prediction_count": len(vehicle_raw),
+        "helmet_debug": helmet_debug,
+        "plate_debug": plate_debug,
+    }
+
+
+@app.get("/debug/models")
+def debug_models() -> dict[str, Any]:
+    """Check Roboflow API key validity and model connectivity."""
+    from pipeline.detect import VEHICLE_MODEL, HELMET_MODEL, PLATE_MODEL, ROBOFLOW_API_KEY, ROBOFLOW_URL
+
+    key_preview = ROBOFLOW_API_KEY[:6] + "..." if len(ROBOFLOW_API_KEY) > 6 else "(empty)"
+    results = {"api_key_preview": key_preview, "roboflow_url": ROBOFLOW_URL, "models": {}}
+
+    # Create a tiny test image (10x10 black square)
+    test_img = np.zeros((10, 10, 3), dtype=np.uint8)
+    det = get_detector()
+
+    for name, model_id in [("vehicle", VEHICLE_MODEL), ("helmet", HELMET_MODEL), ("plate", PLATE_MODEL)]:
+        try:
+            preds = det._call_roboflow(test_img, model_id)
+            results["models"][name] = {
+                "model_id": model_id,
+                "status": "ok",
+                "test_predictions": len(preds),
+            }
+        except Exception as e:
+            results["models"][name] = {
+                "model_id": model_id,
+                "status": "error",
+                "error": str(e),
+            }
+
+    return results

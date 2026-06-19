@@ -61,7 +61,11 @@ class ViolationDetector:
         try:
             ok, buffer = cv2.imencode(".jpg", image)
             if not ok:
+                logger.error(f"Roboflow [{model_id}]: cv2.imencode failed")
                 return []
+
+            img_h, img_w = image.shape[:2]
+            logger.info(f"Roboflow [{model_id}] sending image {img_w}x{img_h} ({len(buffer)} bytes)")
 
             response = self.session.post(
                 f"{ROBOFLOW_URL}/{model_id}",
@@ -71,9 +75,21 @@ class ViolationDetector:
             )
             response.raise_for_status()
             result = response.json()
-            return result.get("predictions", [])
+            logger.info(f"Roboflow [{model_id}] raw response: {result}")
+            predictions = result.get("predictions", [])
+            logger.info(f"Roboflow [{model_id}] returned {len(predictions)} predictions")
+            return predictions
+        except requests.exceptions.Timeout:
+            logger.error(f"Roboflow API timeout [{model_id}]: request exceeded 60s")
+            return []
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"Roboflow API connection error [{model_id}]: {e}")
+            return []
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"Roboflow API HTTP error [{model_id}]: status={response.status_code}, body={response.text[:500]}")
+            return []
         except Exception as e:
-            logger.error(f"Roboflow API error [{model_id}]: {e}")
+            logger.error(f"Roboflow API unexpected error [{model_id}]: {type(e).__name__}: {e}")
             return []
 
     @staticmethod
@@ -126,16 +142,20 @@ class ViolationDetector:
         for pred in vehicle_preds:
             conf = pred.get("confidence", 0)
             cls_name = pred.get("class", "unknown").lower()
-            if conf < 0.35:
+            logger.info(f"Vehicle pred: class={cls_name}, conf={conf:.4f}, raw={pred}")
+            if conf < 0.15:
+                logger.info(f"  -> SKIPPED (conf {conf:.4f} < 0.15)")
                 continue
+            bbox = self._pred_to_xyxy(pred)
+            logger.info(f"  -> ACCEPTED: bbox={[round(c) for c in bbox]}")
             raw_vehicles.append({
                 "cls_name": cls_name,
                 "conf": conf,
-                "bbox": self._pred_to_xyxy(pred),
+                "bbox": bbox,
             })
 
         if not raw_vehicles:
-            logger.info("No vehicles detected in image.")
+            logger.info("No vehicles detected in image (0 predictions passed threshold).")
             return []
 
         for v in raw_vehicles:
@@ -154,10 +174,21 @@ class ViolationDetector:
 
             is_two_wheeler = any(tw in v["cls_name"] for tw in TWO_WHEELER_CLASSES)
 
-            if is_two_wheeler:
+            # The Roboflow vehicle model often returns generic "vehicle" class
+            # instead of specific types like "motorcycle". So we run the helmet
+            # model on ALL vehicles — if it detects riders/heads, it's a
+            # two-wheeler. This makes the helmet model double as a classifier.
+            should_check_helmet = is_two_wheeler or v["cls_name"] in ("vehicle", "unknown")
+
+            if should_check_helmet:
+                if is_two_wheeler:
+                    logger.info(f"Two-wheeler detected ({v['cls_name']}), running helmet check...")
+                else:
+                    logger.info(f"Generic class '{v['cls_name']}' — running helmet check to classify...")
                 crop, _, _ = self._crop_with_padding(image, v["bbox"], pad=20)
 
                 if crop.size > 0:
+                    logger.info(f"Helmet crop size: {crop.shape[1]}x{crop.shape[0]}")
                     helmet_preds = self._call_roboflow(crop, HELMET_MODEL)
 
                     rider_count = 0
@@ -167,7 +198,9 @@ class ViolationDetector:
                     for hp in helmet_preds:
                         hcls = hp.get("class", "").lower()
                         hconf = hp.get("confidence", 0)
-                        if hconf < 0.35:
+                        logger.info(f"  Helmet pred: class={hcls}, conf={hconf:.4f}")
+                        if hconf < 0.15:
+                            logger.info(f"    -> SKIPPED (conf {hconf:.4f} < 0.15)")
                             continue
 
                         rider_count += 1
@@ -180,16 +213,27 @@ class ViolationDetector:
                             no_helmet_cnt += 1
                             best_nh_conf = max(best_nh_conf, hconf)
 
+                    # If helmet model found riders, reclassify generic "vehicle"
+                    if rider_count > 0 and not is_two_wheeler:
+                        logger.info(f"Helmet model found {rider_count} rider(s) — reclassifying '{v['cls_name']}' → 'motorcycle'")
+                        det["class_name"] = "motorcycle"
+
                     if rider_count >= 3:
                         det["is_violation"] = True
                         det["violation_type"] = "Triple Riding"
                         det["violation_confidence"] = round(
                             min(0.99, 0.75 + rider_count * 0.04), 4
                         )
+                        logger.info(f"  ⚠ VIOLATION: Triple Riding ({rider_count} riders)")
                     elif no_helmet_cnt > 0:
                         det["is_violation"] = True
                         det["violation_type"] = "Helmet Non-Compliance"
                         det["violation_confidence"] = round(best_nh_conf, 4)
+                        logger.info(f"  ⚠ VIOLATION: Helmet Non-Compliance (conf={best_nh_conf:.4f})")
+                    elif rider_count > 0:
+                        logger.info(f"  ✓ {rider_count} rider(s) all wearing helmets — no violation")
+                    else:
+                        logger.info(f"  Helmet model found 0 riders — likely a car/truck, skipping")
 
             detections.append(det)
 
@@ -205,7 +249,9 @@ class ViolationDetector:
 
             for pp in plate_preds:
                 pconf = pp.get("confidence", 0)
-                if pconf < 0.40 or pconf <= best_conf:
+                logger.info(f"  Plate pred: conf={pconf:.4f}, class={pp.get('class', '?')}")
+                if pconf < 0.20 or pconf <= best_conf:
+                    logger.info(f"    -> SKIPPED (conf {pconf:.4f} < 0.20 or <= best {best_conf:.4f})")
                     continue
                 best_conf = pconf
                 px1, py1, px2, py2 = self._pred_to_xyxy(pp)
