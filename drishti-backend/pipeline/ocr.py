@@ -1,14 +1,15 @@
 import re
+import cv2
 import numpy as np
 import easyocr
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Indian license plate pattern
-# Covers: KA03MJ1234, MH12AB1234, DL8CAB1234 etc.
+# More flexible — handles spaces, partial reads, BH series
 INDIAN_PLATE_PATTERN = re.compile(
-    r'[A-Z]{2}[\s\-]?[0-9]{1,2}[\s\-]?[A-Z]{1,3}[\s\-]?[0-9]{4}'
+    r'[A-Z]{2}[\s\-]?\d{1,2}[\s\-]?[A-Z]{1,3}[\s\-]?\d{4}',
+    re.IGNORECASE
 )
 
 class PlateOCR:
@@ -19,67 +20,99 @@ class PlateOCR:
         logger.info("EasyOCR loaded successfully.")
 
     def extract_plate(self, image: np.ndarray, plate_bbox: list) -> dict:
-        """
-        Crop plate region, run OCR, extract Indian plate text.
-
-        Args:
-            image: full frame numpy array (BGR, OpenCV format)
-            plate_bbox: [x1, y1, x2, y2] in pixel coords from plate model
-
-        Returns:
-            dict with plate_text, confidence, raw_ocr
-        """
         try:
             x1, y1, x2, y2 = [int(c) for c in plate_bbox]
             h, w = image.shape[:2]
-            # Plate bbox is already tight from plate model — minimal padding only
             x1p = max(0, x1 - 3)
             y1p = max(0, y1 - 3)
             x2p = min(w, x2 + 3)
             y2p = min(h, y2 + 3)
             crop = image[y1p:y2p, x1p:x2p]
-            
+
             if crop.size == 0:
-                return {"plate_text": "UNREADABLE", "confidence": 0.0, "raw_ocr": ""}
+                return {"plate_text": "UNDETECTED", "confidence": 0.0, "raw_ocr": ""}
+
+            # Upscale small plates — EasyOCR needs minimum ~100px width
+            ph, pw = crop.shape[:2]
+            if pw < 120:
+                scale = 120 / pw
+                crop = cv2.resize(crop, None, fx=scale, fy=scale, 
+                                interpolation=cv2.INTER_CUBIC)
+
+            # Preprocessing pipeline for Indian plates
+            # 1. Convert to grayscale
+            gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
             
-            # EasyOCR returns list of [bbox, text, confidence]
-            results = self.reader.readtext(crop)
+            # 2. CLAHE for contrast enhancement (handles faded plates)
+            clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4, 4))
+            enhanced = clahe.apply(gray)
             
-            if not results:
-                return {"plate_text": "UNREADABLE", "confidence": 0.0, "raw_ocr": ""}
+            # 3. Denoise
+            denoised = cv2.fastNlMeansDenoising(enhanced, h=10)
             
-            # Collect all detected text
-            raw_texts = [r[1].upper().replace(" ", "").replace("-", "") 
-                        for r in results]
-            raw_combined = " | ".join(raw_texts)
+            # 4. Threshold — try both and pick best
+            _, thresh_otsu = cv2.threshold(
+                denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+            )
+            thresh_adaptive = cv2.adaptiveThreshold(
+                denoised, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                cv2.THRESH_BINARY, 11, 2
+            )
             
-            # Try to match Indian plate pattern in each result
-            best_plate = None
+            # Try OCR on multiple versions: original color crop, 
+            # grayscale, otsu, adaptive
+            best_text = ""
             best_conf = 0.0
+            best_raw = ""
             
-            for bbox, text, conf in results:
-                cleaned = text.upper().replace(" ", "").replace("-", "")
-                match = INDIAN_PLATE_PATTERN.search(cleaned)
-                if match and conf > best_conf:
-                    best_plate = match.group(0).replace(" ", "").replace("-", "")
-                    best_conf = conf
+            candidates = [
+                ("color", crop),
+                ("gray", cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)),
+                ("otsu", cv2.cvtColor(thresh_otsu, cv2.COLOR_GRAY2BGR)),
+                ("adaptive", cv2.cvtColor(thresh_adaptive, cv2.COLOR_GRAY2BGR)),
+            ]
             
-            if best_plate:
+            for name, candidate_img in candidates:
+                try:
+                    results = self.reader.readtext(candidate_img)
+                    if not results:
+                        continue
+                        
+                    raw_texts = [r[1].upper().replace(" ", "").replace("-", "") 
+                                for r in results]
+                    raw_combined = " ".join(raw_texts)
+                    
+                    for bbox, text, conf in results:
+                        cleaned = text.upper().replace(" ", "").replace("-", "")
+                        match = INDIAN_PLATE_PATTERN.search(cleaned)
+                        if match and conf > best_conf:
+                            best_text = match.group(0)
+                            best_conf = conf
+                            best_raw = raw_combined
+                except Exception:
+                    continue
+            
+            if best_text:
                 return {
-                    "plate_text": best_plate,
+                    "plate_text": best_text,
                     "confidence": round(float(best_conf), 4),
-                    "raw_ocr": raw_combined
+                    "raw_ocr": best_raw
                 }
-            else:
-                # No valid plate pattern found — return best text anyway
-                # (useful for partial reads)
-                best_result = max(results, key=lambda r: r[2])
+            
+            # No pattern match — return best raw text anyway
+            # (partial read is better than UNREADABLE)
+            all_results = self.reader.readtext(crop)
+            if all_results:
+                best_result = max(all_results, key=lambda r: r[2])
+                raw_text = best_result[1].upper().strip()
                 return {
-                    "plate_text": "UNREADABLE",
-                    "confidence": 0.0,
-                    "raw_ocr": raw_combined
+                    "plate_text": raw_text if len(raw_text) >= 4 else "UNREADABLE",
+                    "confidence": round(float(best_result[2]), 4),
+                    "raw_ocr": raw_text
                 }
-                
+            
+            return {"plate_text": "UNREADABLE", "confidence": 0.0, "raw_ocr": ""}
+            
         except Exception as e:
-            logger.error(f"OCR failed for plate bbox {plate_bbox}: {e}")
+            logger.error(f"OCR failed: {e}")
             return {"plate_text": "UNREADABLE", "confidence": 0.0, "raw_ocr": ""}
