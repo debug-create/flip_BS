@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 ROBOFLOW_API_KEY = os.getenv("ROBOFLOW_API_KEY", "")
 ROBOFLOW_URL = os.getenv("ROBOFLOW_URL", "https://serverless.roboflow.com")
 
-HELMET_MODEL = "helmet-detection-ligfk/4"
+HELMET_MODEL = "helmet-model-omssm/2"
 VEHICLE_MODEL = "vehicle-detection-3mmwj/8"
 PLATE_MODEL = "license-plate-recognition-rxg4e/11"
 
@@ -49,13 +49,13 @@ class ViolationDetector:
         self.session = requests.Session()
         logger.info(
             "DRISHTI ViolationDetector ready. "
-            "Models: vehicle(84.2% mAP) + helmet(81.1% mAP) + plate(97.2% mAP)",
+            "Models: vehicle=%s, helmet=%s, plate=%s",
+            VEHICLE_MODEL, HELMET_MODEL, PLATE_MODEL,
         )
 
     def _call_roboflow(self, image: np.ndarray, model_id: str) -> list:
         """
         Send a numpy BGR image to Roboflow hosted inference via HTTP.
-        Uses requests directly (inference-sdk does not support Python 3.14).
         Returns list of prediction dicts, or [] on any failure.
         """
         try:
@@ -75,7 +75,7 @@ class ViolationDetector:
             )
             response.raise_for_status()
             result = response.json()
-            logger.info(f"Roboflow [{model_id}] raw response: {result}")
+            logger.info(f"Roboflow [{model_id}] raw response keys: {list(result.keys())}")
             predictions = result.get("predictions", [])
             logger.info(f"Roboflow [{model_id}] returned {len(predictions)} predictions")
             return predictions
@@ -85,7 +85,7 @@ class ViolationDetector:
         except requests.exceptions.ConnectionError as e:
             logger.error(f"Roboflow API connection error [{model_id}]: {e}")
             return []
-        except requests.exceptions.HTTPError as e:
+        except requests.exceptions.HTTPError:
             logger.error(f"Roboflow API HTTP error [{model_id}]: status={response.status_code}, body={response.text[:500]}")
             return []
         except Exception as e:
@@ -93,16 +93,22 @@ class ViolationDetector:
             return []
 
     @staticmethod
-    def _pred_to_xyxy(pred: dict) -> list[float]:
+    def _pred_to_xyxy(pred: dict, img_w: int = 99999,
+                      img_h: int = 99999) -> list[float]:
         """
         Convert Roboflow center-format prediction to [x1,y1,x2,y2].
         Roboflow returns: x=cx, y=cy, width=w, height=h
+        Coordinates are clamped to [0, img_w) x [0, img_h).
         """
         cx = pred.get("x", 0)
         cy = pred.get("y", 0)
         bw = pred.get("width", 0)
         bh = pred.get("height", 0)
-        return [cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2]
+        x1 = max(0, cx - bw / 2)
+        y1 = max(0, cy - bh / 2)
+        x2 = min(img_w, cx + bw / 2)
+        y2 = min(img_h, cy + bh / 2)
+        return [x1, y1, x2, y2]
 
     @staticmethod
     def _crop_with_padding(image: np.ndarray, bbox: list, pad: int = 20) -> tuple:
@@ -137,6 +143,7 @@ class ViolationDetector:
         det_id = 1
 
         vehicle_preds = self._call_roboflow(image, VEHICLE_MODEL)
+        h, w = image.shape[:2]
 
         raw_vehicles = []
         for pred in vehicle_preds:
@@ -146,7 +153,12 @@ class ViolationDetector:
             if conf < 0.15:
                 logger.info(f"  -> SKIPPED (conf {conf:.4f} < 0.15)")
                 continue
-            bbox = self._pred_to_xyxy(pred)
+            bbox = self._pred_to_xyxy(pred, img_w=w, img_h=h)
+            box_w = bbox[2] - bbox[0]
+            box_h = bbox[3] - bbox[1]
+            if box_w < 5 or box_h < 5:
+                logger.warning(f"Skipping degenerate bbox: {bbox}")
+                continue
             logger.info(f"  -> ACCEPTED: bbox={[round(c) for c in bbox]}")
             raw_vehicles.append({
                 "cls_name": cls_name,
@@ -254,7 +266,8 @@ class ViolationDetector:
                     logger.info(f"    -> SKIPPED (conf {pconf:.4f} < 0.20 or <= best {best_conf:.4f})")
                     continue
                 best_conf = pconf
-                px1, py1, px2, py2 = self._pred_to_xyxy(pp)
+                ch, cw = crop.shape[:2]
+                px1, py1, px2, py2 = self._pred_to_xyxy(pp, img_w=cw, img_h=ch)
                 best_plate_bbox = [
                     ox + px1, oy + py1,
                     ox + px2, oy + py2,

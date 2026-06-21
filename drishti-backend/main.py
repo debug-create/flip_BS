@@ -66,7 +66,7 @@ async def lifespan(_: FastAPI):
 
     detector = get_detector()
     plate_ocr = PlateOCR()
-    logger.info("DRISHTI backend ready — Roboflow 3-model pipeline + EasyOCR active.")
+    logger.info("DRISHTI backend ready — Roboflow 3-model pipeline + indian-plate OCR active.")
     yield
 
 

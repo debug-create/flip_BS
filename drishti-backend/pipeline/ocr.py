@@ -1,10 +1,15 @@
+import os
 import re
 import cv2
 import numpy as np
-import easyocr
+import requests
 import logging
 
 logger = logging.getLogger(__name__)
+
+ROBOFLOW_API_KEY = os.getenv("ROBOFLOW_API_KEY", "")
+ROBOFLOW_URL = os.getenv("ROBOFLOW_URL", "https://serverless.roboflow.com")
+PLATE_OCR_MODEL = "indian-plate/1"
 
 # More flexible — handles spaces, partial reads, BH series
 INDIAN_PLATE_PATTERN = re.compile(
@@ -12,12 +17,79 @@ INDIAN_PLATE_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+
 class PlateOCR:
     def __init__(self):
-        logger.info("Loading EasyOCR (English)...")
-        # gpu=False forces CPU mode — works on all machines
-        self.reader = easyocr.Reader(['en'], gpu=False, verbose=False)
-        logger.info("EasyOCR loaded successfully.")
+        if not ROBOFLOW_API_KEY:
+            raise ValueError(
+                "ROBOFLOW_API_KEY is not set. "
+                "Copy drishti-backend/.env.example to .env and add your Roboflow API key."
+            )
+        self.session = requests.Session()
+        logger.info("PlateOCR ready (Roboflow indian-plate/1 via HTTP).")
+
+    def _infer_plate(self, image: np.ndarray) -> list[dict]:
+        """
+        Send a plate crop to the indian-plate/1 Roboflow model via HTTP.
+        Returns list of prediction dicts (each with 'class', 'confidence',
+        and spatial coords 'x', 'y', 'width', 'height').
+        """
+        try:
+            ok, buffer = cv2.imencode(".jpg", image)
+            if not ok:
+                logger.error("PlateOCR: cv2.imencode failed")
+                return []
+
+            response = self.session.post(
+                f"{ROBOFLOW_URL}/{PLATE_OCR_MODEL}",
+                params={"api_key": ROBOFLOW_API_KEY},
+                files={"file": ("plate.jpg", buffer.tobytes(), "image/jpeg")},
+                timeout=60,
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            # Handle both object-detection and classification responses
+            predictions = result.get("predictions", [])
+            if not predictions and "top" in result:
+                return [{"class": result["top"], "confidence": result.get("confidence", 0.0)}]
+            return predictions
+        except Exception as e:
+            logger.error(f"PlateOCR inference error: {type(e).__name__}: {e}")
+            return []
+
+    @staticmethod
+    def _assemble_plate_text(preds: list[dict]) -> tuple[str, float]:
+        """
+        The indian-plate/1 model is a character-level object detection model.
+        Each prediction has class='<char>' and x=<position>.
+        Sort predictions left-to-right by x-coordinate, concatenate classes
+        to form the full plate string, and average confidences.
+        Returns (assembled_text, avg_confidence).
+        """
+        if not preds:
+            return "", 0.0
+
+        # Filter out very low confidence detections
+        good_preds = [p for p in preds if float(p.get("confidence", 0)) >= 0.15]
+        if not good_preds:
+            return "", 0.0
+
+        # Sort left-to-right by x coordinate (center of each detected char)
+        sorted_preds = sorted(good_preds, key=lambda p: float(p.get("x", 0)))
+
+        chars = []
+        confs = []
+        for p in sorted_preds:
+            char = str(p.get("class", "")).strip()
+            if char:  # skip empty
+                chars.append(char.upper())
+                confs.append(float(p.get("confidence", 0)))
+
+        assembled = "".join(chars)
+        avg_conf = sum(confs) / len(confs) if confs else 0.0
+
+        return assembled, avg_conf
 
     def extract_plate(self, image: np.ndarray, plate_bbox: list) -> dict:
         try:
@@ -32,25 +104,18 @@ class PlateOCR:
             if crop.size == 0:
                 return {"plate_text": "UNDETECTED", "confidence": 0.0, "raw_ocr": ""}
 
-            # Upscale small plates — EasyOCR needs minimum ~100px width
+            # Upscale small plates for better inference
             ph, pw = crop.shape[:2]
             if pw < 120:
                 scale = 120 / pw
-                crop = cv2.resize(crop, None, fx=scale, fy=scale, 
-                                interpolation=cv2.INTER_CUBIC)
+                crop = cv2.resize(crop, None, fx=scale, fy=scale,
+                                  interpolation=cv2.INTER_CUBIC)
 
-            # Preprocessing pipeline for Indian plates
-            # 1. Convert to grayscale
+            # Preprocessing pipeline
             gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-            
-            # 2. CLAHE for contrast enhancement (handles faded plates)
             clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4, 4))
             enhanced = clahe.apply(gray)
-            
-            # 3. Denoise
             denoised = cv2.fastNlMeansDenoising(enhanced, h=10)
-            
-            # 4. Threshold — try both and pick best
             _, thresh_otsu = cv2.threshold(
                 denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
             )
@@ -58,61 +123,70 @@ class PlateOCR:
                 denoised, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
                 cv2.THRESH_BINARY, 11, 2
             )
-            
-            # Try OCR on multiple versions: original color crop, 
-            # grayscale, otsu, adaptive
+
             best_text = ""
             best_conf = 0.0
             best_raw = ""
-            
+
             candidates = [
                 ("color", crop),
                 ("gray", cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)),
                 ("otsu", cv2.cvtColor(thresh_otsu, cv2.COLOR_GRAY2BGR)),
                 ("adaptive", cv2.cvtColor(thresh_adaptive, cv2.COLOR_GRAY2BGR)),
             ]
-            
+
             for name, candidate_img in candidates:
                 try:
-                    results = self.reader.readtext(candidate_img)
-                    if not results:
+                    preds = self._infer_plate(candidate_img)
+                    if not preds:
                         continue
-                        
-                    raw_texts = [r[1].upper().replace(" ", "").replace("-", "") 
-                                for r in results]
-                    raw_combined = " ".join(raw_texts)
-                    
-                    for bbox, text, conf in results:
-                        cleaned = text.upper().replace(" ", "").replace("-", "")
-                        match = INDIAN_PLATE_PATTERN.search(cleaned)
-                        if match and conf > best_conf:
-                            best_text = match.group(0)
-                            best_conf = conf
-                            best_raw = raw_combined
+
+                    # Assemble all character detections into one string
+                    assembled, avg_conf = self._assemble_plate_text(preds)
+                    logger.info(
+                        f"  Plate OCR [{name}]: assembled='{assembled}' "
+                        f"(chars={len(preds)}), avg_conf={avg_conf:.4f}"
+                    )
+
+                    if not assembled:
+                        continue
+
+                    # Try Indian plate pattern match first
+                    cleaned = assembled.replace(" ", "").replace("-", "")
+                    match = INDIAN_PLATE_PATTERN.search(cleaned)
+                    if match and avg_conf > best_conf:
+                        best_text = match.group(0)
+                        best_conf = avg_conf
+                        best_raw = assembled
+                    elif not best_text and len(assembled) >= 4 and avg_conf > best_conf:
+                        # No Indian pattern match, but we have a decent read
+                        best_text = assembled
+                        best_conf = avg_conf
+                        best_raw = assembled
                 except Exception:
                     continue
-            
+
             if best_text:
                 return {
                     "plate_text": best_text,
                     "confidence": round(float(best_conf), 4),
                     "raw_ocr": best_raw
                 }
-            
-            # No pattern match — return best raw text anyway
-            # (partial read is better than UNREADABLE)
-            all_results = self.reader.readtext(crop)
-            if all_results:
-                best_result = max(all_results, key=lambda r: r[2])
-                raw_text = best_result[1].upper().strip()
-                return {
-                    "plate_text": raw_text if len(raw_text) >= 4 else "UNREADABLE",
-                    "confidence": round(float(best_result[2]), 4),
-                    "raw_ocr": raw_text
-                }
-            
+
+            # Fallback — try color crop one more time
+            fallback_preds = self._infer_plate(crop)
+            if fallback_preds:
+                assembled, avg_conf = self._assemble_plate_text(fallback_preds)
+                logger.info(f"  Plate OCR [fallback]: assembled='{assembled}', avg_conf={avg_conf:.4f}")
+                if assembled and len(assembled) >= 2:
+                    return {
+                        "plate_text": assembled,
+                        "confidence": round(avg_conf, 4),
+                        "raw_ocr": assembled
+                    }
+
             return {"plate_text": "UNREADABLE", "confidence": 0.0, "raw_ocr": ""}
-            
+
         except Exception as e:
             logger.error(f"OCR failed: {e}")
             return {"plate_text": "UNREADABLE", "confidence": 0.0, "raw_ocr": ""}
