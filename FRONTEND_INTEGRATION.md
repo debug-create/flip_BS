@@ -176,6 +176,29 @@ VITE_API_URL=http://localhost:8000
       "plate": {
         "plate_text": "KA03MJ1234",
         "confidence": 0.82
+      },
+      "vehicle_lookup": {
+        "plate_number": "KA03MJ1234",
+        "registration_date": "14-03-2021",
+        "owner_name": "Rajesh Kumar",
+        "address": "Whitefield, Bengaluru",
+        "vehicle_class": "Motorcycle/Scooter",
+        "make": "Honda",
+        "model": "CB Shine",
+        "colour": "Black",
+        "fuel_type": "Petrol",
+        "engine": "125cc Single Cylinder",
+        "insurance_status": "VALID",
+        "insurance_expiry": "22-09-2027",
+        "puc_status": "EXPIRED",
+        "puc_expiry": "10-05-2026",
+        "prior_violations": 3,
+        "repeat_offender": true,
+        "pending_challans": 1,
+        "pending_amount_rs": 1200,
+        "rto_office": "Bengaluru (East) RTO",
+        "data_source": "Vahan 4.0 · MoRTH",
+        "lookup_status": "SUCCESS"
       }
     },
     {
@@ -185,7 +208,8 @@ VITE_API_URL=http://localhost:8000
       "bbox": [200, 50, 250, 180],
       "is_violation": false,
       "violation_type": null,
-      "plate": null
+      "plate": null,
+      "vehicle_lookup": null
     }
   ],
   "annotated_image_b64": "<base64 JPEG string — no data: prefix>",
@@ -254,6 +278,39 @@ const src = `data:image/jpeg;base64,${response.annotated_image_b64}`;
 ```
 
 Each item in `violation_timeline` has the **same shape** as `/analyze/image` response. Use `aggregate_violation_breakdown` for Analytics charts after video upload.
+
+---
+
+### `GET /vehicle/lookup/{plate_number}`
+
+**Use for:** Retrieve full vehicle registration details from the Vahan database (features a simulated 0.8s network delay).
+
+**Response:**
+```json
+{
+  "plate_number": "KA03MJ1234",
+  "registration_date": "14-03-2021",
+  "owner_name": "Rajesh Kumar",
+  "address": "Whitefield, Bengaluru",
+  "vehicle_class": "Motorcycle/Scooter",
+  "make": "Honda",
+  "model": "CB Shine",
+  "colour": "Black",
+  "fuel_type": "Petrol",
+  "engine": "125cc Single Cylinder",
+  "insurance_status": "VALID",
+  "insurance_expiry": "22-09-2027",
+  "puc_status": "EXPIRED",
+  "puc_expiry": "10-05-2026",
+  "prior_violations": 3,
+  "repeat_offender": true,
+  "pending_challans": 1,
+  "pending_amount_rs": 1200,
+  "rto_office": "Bengaluru (East) RTO",
+  "data_source": "Vahan 4.0 · MoRTH",
+  "lookup_status": "SUCCESS"
+}
+```
 
 ---
 

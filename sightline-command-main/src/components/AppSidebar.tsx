@@ -2,7 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   LayoutDashboard, ScanSearch, FileSearch, BarChart3, Truck, Flame, ServerCog,
-  ChevronLeft, ChevronRight, Siren,
+  ChevronLeft, ChevronRight, Siren, Radio, User,
 } from "lucide-react";
 import { ACTIVE_ALERTS_SUMMARY } from "@/lib/mockData";
 
@@ -11,9 +11,11 @@ const NAV = [
   { to: "/analyze", label: "Analyze", icon: ScanSearch, code: "AN-02" },
   { to: "/evidence", label: "Evidence Log", icon: FileSearch, code: "EV-03" },
   { to: "/analytics", label: "Analytics", icon: BarChart3, code: "AT-04" },
-  { to: "/fleet", label: "Fleet Intelligence", icon: Truck, code: "FL-05" },
-  { to: "/hotspots", label: "Hotspot Prediction", icon: Flame, code: "HP-06" },
-  { to: "/system", label: "System Status", icon: ServerCog, code: "SY-07" },
+  { to: "/citizen", label: "👤 Citizen Report", icon: User, code: "CR-05", isPublic: true, isGroupStart: true },
+  { to: "/citizenview", label: "📡 CitizenView", icon: Radio, code: "CV-06", isPublic: true },
+  { to: "/fleet", label: "Fleet Intelligence", icon: Truck, code: "FL-07" },
+  { to: "/hotspots", label: "Hotspot Prediction", icon: Flame, code: "HP-08" },
+  { to: "/system", label: "System Status", icon: ServerCog, code: "SY-09" },
 ] as const;
 
 export function AppSidebar() {
@@ -46,26 +48,57 @@ export function AppSidebar() {
           const active = pathname === item.to;
           const Icon = item.icon;
           return (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={`group relative flex items-center gap-3 rounded-md px-2.5 py-2 text-sm transition ${
-                active
-                  ? "bg-primary/10 text-foreground"
-                  : "text-muted-foreground hover:bg-accent/40 hover:text-foreground"
-              }`}
-            >
-              {active && (
-                <span className="absolute inset-y-1 left-0 w-[2px] rounded-r bg-primary shadow-[0_0_12px_var(--primary)]" />
-              )}
-              <Icon className={`h-4 w-4 shrink-0 ${active ? "text-primary" : ""}`} />
-              {!collapsed && (
+            <div key={item.to} className="flex flex-col gap-0.5">
+              {item.isGroupStart && (
                 <>
-                  <span className="flex-1 truncate">{item.label}</span>
-                  <span className="mono text-[9px] tracking-widest text-muted-foreground/70">{item.code}</span>
+                  <div className="my-2 border-t border-border/60" />
+                  {!collapsed && (
+                    <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.25em] text-muted-foreground/80">
+                      Public Access
+                    </div>
+                  )}
                 </>
               )}
-            </Link>
+              <Link
+                to={item.to}
+                className={`group relative flex items-center gap-3 rounded-md px-2.5 py-2 text-sm transition ${
+                  active
+                    ? "bg-primary/10 text-foreground"
+                    : item.isPublic
+                      ? "text-muted-foreground hover:bg-blue-500/10 hover:text-foreground"
+                      : "text-muted-foreground hover:bg-accent/40 hover:text-foreground"
+                }`}
+              >
+                {active && (
+                  <span className="absolute inset-y-1 left-0 w-[2px] rounded-r bg-primary shadow-[0_0_12px_var(--primary)]" />
+                )}
+                
+                <div className="relative flex items-center shrink-0">
+                  <Icon className={`h-4 w-4 shrink-0 ${active ? "text-primary" : ""}`} />
+                  {collapsed && item.isPublic && (
+                    <span className="absolute -top-1.5 -right-1.5 flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
+                    </span>
+                  )}
+                </div>
+
+                {!collapsed && (
+                  <>
+                    <span className="flex-1 truncate flex items-center gap-1.5">
+                      {item.label}
+                      {item.isPublic && (
+                        <span className="relative flex h-1.5 w-1.5 shrink-0">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
+                        </span>
+                      )}
+                    </span>
+                    <span className="mono text-[9px] tracking-widest text-muted-foreground/70">{item.code}</span>
+                  </>
+                )}
+              </Link>
+            </div>
           );
         })}
       </nav>

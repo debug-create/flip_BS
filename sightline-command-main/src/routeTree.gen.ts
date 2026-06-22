@@ -13,6 +13,8 @@ import { Route as SystemRouteImport } from './routes/system'
 import { Route as HotspotsRouteImport } from './routes/hotspots'
 import { Route as FleetRouteImport } from './routes/fleet'
 import { Route as EvidenceRouteImport } from './routes/evidence'
+import { Route as CitizenviewRouteImport } from './routes/citizenview'
+import { Route as CitizenRouteImport } from './routes/citizen'
 import { Route as AnalyzeRouteImport } from './routes/analyze'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
@@ -37,6 +39,16 @@ const EvidenceRoute = EvidenceRouteImport.update({
   path: '/evidence',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CitizenviewRoute = CitizenviewRouteImport.update({
+  id: '/citizenview',
+  path: '/citizenview',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CitizenRoute = CitizenRouteImport.update({
+  id: '/citizen',
+  path: '/citizen',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AnalyzeRoute = AnalyzeRouteImport.update({
   id: '/analyze',
   path: '/analyze',
@@ -57,6 +69,8 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/analyze': typeof AnalyzeRoute
+  '/citizen': typeof CitizenRoute
+  '/citizenview': typeof CitizenviewRoute
   '/evidence': typeof EvidenceRoute
   '/fleet': typeof FleetRoute
   '/hotspots': typeof HotspotsRoute
@@ -66,6 +80,8 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/analyze': typeof AnalyzeRoute
+  '/citizen': typeof CitizenRoute
+  '/citizenview': typeof CitizenviewRoute
   '/evidence': typeof EvidenceRoute
   '/fleet': typeof FleetRoute
   '/hotspots': typeof HotspotsRoute
@@ -76,6 +92,8 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/analyze': typeof AnalyzeRoute
+  '/citizen': typeof CitizenRoute
+  '/citizenview': typeof CitizenviewRoute
   '/evidence': typeof EvidenceRoute
   '/fleet': typeof FleetRoute
   '/hotspots': typeof HotspotsRoute
@@ -87,6 +105,8 @@ export interface FileRouteTypes {
     | '/'
     | '/analytics'
     | '/analyze'
+    | '/citizen'
+    | '/citizenview'
     | '/evidence'
     | '/fleet'
     | '/hotspots'
@@ -96,6 +116,8 @@ export interface FileRouteTypes {
     | '/'
     | '/analytics'
     | '/analyze'
+    | '/citizen'
+    | '/citizenview'
     | '/evidence'
     | '/fleet'
     | '/hotspots'
@@ -105,6 +127,8 @@ export interface FileRouteTypes {
     | '/'
     | '/analytics'
     | '/analyze'
+    | '/citizen'
+    | '/citizenview'
     | '/evidence'
     | '/fleet'
     | '/hotspots'
@@ -115,6 +139,8 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnalyticsRoute: typeof AnalyticsRoute
   AnalyzeRoute: typeof AnalyzeRoute
+  CitizenRoute: typeof CitizenRoute
+  CitizenviewRoute: typeof CitizenviewRoute
   EvidenceRoute: typeof EvidenceRoute
   FleetRoute: typeof FleetRoute
   HotspotsRoute: typeof HotspotsRoute
@@ -151,6 +177,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EvidenceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/citizenview': {
+      id: '/citizenview'
+      path: '/citizenview'
+      fullPath: '/citizenview'
+      preLoaderRoute: typeof CitizenviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/citizen': {
+      id: '/citizen'
+      path: '/citizen'
+      fullPath: '/citizen'
+      preLoaderRoute: typeof CitizenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/analyze': {
       id: '/analyze'
       path: '/analyze'
@@ -179,6 +219,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnalyticsRoute: AnalyticsRoute,
   AnalyzeRoute: AnalyzeRoute,
+  CitizenRoute: CitizenRoute,
+  CitizenviewRoute: CitizenviewRoute,
   EvidenceRoute: EvidenceRoute,
   FleetRoute: FleetRoute,
   HotspotsRoute: HotspotsRoute,

@@ -7,6 +7,7 @@ import { annotatedImageSrc, getViolationTypes } from "@/lib/api";
 import { useEvidence } from "@/lib/evidenceStore";
 import { getBestPlate, getPrimaryViolation } from "@/lib/analytics";
 import type { EvidencePackage } from "@/lib/types";
+import { VehicleOwnerCard } from "@/components/VehicleOwnerCard";
 
 export const Route = createFileRoute("/evidence")({
   head: () => ({ meta: [{ title: "Evidence Log — DRISHTI" }] }),
@@ -260,6 +261,12 @@ function EvidenceModal({ v, onClose }: { v: EvidencePackage; onClose: () => void
               value={new Date(v.timestamp).toLocaleString("en-IN", { hour12: false })}
             />
             <Meta icon={ShieldCheck} label="Violation" value={primary} />
+
+            {v.detections
+              .filter((d) => d.vehicle_lookup)
+              .map((d) => (
+                <VehicleOwnerCard key={d.detection_id} data={d.vehicle_lookup} />
+              ))}
 
             <div className="rounded-md border border-border bg-background/60 p-3">
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground">

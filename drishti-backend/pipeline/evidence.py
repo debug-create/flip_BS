@@ -35,7 +35,8 @@ def build_evidence_package(
     plates: list[dict],
     source_filename: str,
     inference_time_ms: float,
-    model_version: str = "Roboflow-3Model",
+    model_version: str = "DRISHTI-v1.0",
+    summary_override: dict | None = None,
 ) -> dict:
     height, width = original_image.shape[:2]
 
@@ -55,9 +56,10 @@ def build_evidence_package(
             violation_breakdown[violation_type] += 1
 
         plate_payload = None
+        lookup_payload = detection.get("vehicle_lookup")
         if is_vehicle:
             plate_data = detection.get("plate") or plate
-            plate_text = plate_data.get("plate_text", "UNREADABLE")
+            plate_text = plate_data.get("plate_text", "UNREADABLE") if plate_data else "UNDETECTED"
             if plate_text not in {None, "UNDETECTED", "UNREADABLE"}:
                 plate_payload = {
                     "plate_text": plate_text,
@@ -69,6 +71,10 @@ def build_evidence_package(
                     "confidence": plate_data.get("confidence", 0.0),
                 }
 
+            if lookup_payload is None and plate_text and plate_text not in ("UNREADABLE", "UNDETECTED"):
+                from pipeline.vehicle_lookup import lookup_vehicle
+                lookup_payload = lookup_vehicle(plate_text)
+
         formatted_detections.append(
             {
                 "detection_id": detection.get("detection_id", f"D{idx:03d}"),
@@ -78,20 +84,25 @@ def build_evidence_package(
                 "is_violation": is_violation,
                 "violation_type": violation_type,
                 "plate": plate_payload,
+                "vehicle_lookup": lookup_payload,
             }
         )
 
-    total_violations = sum(violation_breakdown.values())
+    if summary_override is not None:
+        summary = summary_override
+    else:
+        total_violations = sum(violation_breakdown.values())
+        summary = {
+            "total_vehicles_detected": len(vehicle_detections),
+            "total_violations_detected": total_violations,
+            "violation_breakdown": violation_breakdown,
+        }
 
     return {
         "evidence_id": _generate_evidence_id(),
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "source": source_filename or "live_feed",
-        "summary": {
-            "total_vehicles_detected": len(vehicle_detections),
-            "total_violations_detected": total_violations,
-            "violation_breakdown": violation_breakdown,
-        },
+        "summary": summary,
         "detections": formatted_detections,
         "annotated_image_b64": _image_to_base64_jpeg(annotated_image),
         "processing_metadata": {

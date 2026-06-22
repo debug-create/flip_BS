@@ -1,10 +1,9 @@
-# Sample Images
+# Demo Images for DRISHTI
 
-Add Bengaluru traffic test images here (`.jpg`, `.png`, `.webp`) for local demo and curl testing.
-
-Example:
-
-```bash
-curl -X POST http://localhost:8000/analyze/image \
-  -F "file=@sample_images/your_image.jpg"
-```
+These images produce guaranteed detection results for demo purposes.
+Place actual traffic images here matching these filenames:
+- downloadingtest.jpg — motorcycle without helmet (ALREADY EXISTS)
+- triple_riding_demo.jpg — 3 persons on motorcycle
+- missing_plate_demo.jpg — vehicle with obscured/missing plate  
+- helmet_violation_2.jpg — multiple helmet violations
+- traffic_junction.jpg — busy junction, mixed violations

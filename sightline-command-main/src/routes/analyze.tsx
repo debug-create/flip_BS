@@ -11,6 +11,7 @@ import { analyzeImage, analyzeVideo, annotatedImageSrc, formatApiError } from "@
 import { useEvidence } from "@/lib/evidenceStore";
 import { getBestPlate, getPrimaryViolation } from "@/lib/analytics";
 import type { EvidencePackage, VideoAnalysisResult } from "@/lib/types";
+import { VehicleOwnerCard } from "@/components/VehicleOwnerCard";
 
 export const Route = createFileRoute("/analyze")({
   head: () => ({ meta: [{ title: "Analyze — DRISHTI" }] }),
@@ -108,6 +109,7 @@ function Analyze() {
   const bestPlate = result ? getBestPlate(result) : "—";
   const topViolationDet = result?.detections.find((d) => d.is_violation);
   const annotatedSrc = result ? annotatedImageSrc(result.annotated_image_b64) : preview;
+  const primaryLookup = result?.detections.find((d) => d.vehicle_lookup)?.vehicle_lookup;
 
   return (
     <div className="flex flex-col gap-4">
@@ -196,6 +198,11 @@ function Analyze() {
                       tone={result.summary.total_violations_detected > 0 ? "warning" : "success"}
                     />
                   </div>
+                  {primaryLookup && (
+                    <div className="px-4 pb-4 border-t border-border/40 pt-4">
+                      <VehicleOwnerCard data={primaryLookup} compact />
+                    </div>
+                  )}
                 </Panel>
 
                 <Panel
