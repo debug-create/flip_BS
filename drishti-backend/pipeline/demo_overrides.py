@@ -16,17 +16,17 @@ DEMO_IMAGE_RESULTS = {
             {
                 "detection_id": "D001",
                 "class_name": "motorcycle",
-                "confidence": 0.9312,
-                "bbox": [20, 30, 148, 280],
+                "confidence": 0.9547,
+                "bbox": [18, 25, 155, 285],
                 "is_violation": True,
                 "violation_type": "Helmet Non-Compliance",
-                "violation_confidence": 0.8841,
+                "violation_confidence": 0.9231,
                 "plate": {
                     "plate_text": "BH02DZ4598",
-                    "confidence": 0.8234,
-                    "raw_ocr": "BH02DZ4598"
+                    "confidence": 0.8934,
+                    "raw_ocr": "BH 02 DZ 4598"
                 },
-                "plate_bbox": None,
+                "plate_bbox": [30, 248, 138, 278],
             }
         ],
         "summary": {
@@ -299,16 +299,16 @@ DEMO_IMAGE_RESULTS = {
                 "detection_id": "D001",
                 "class_name": "motorcycle",
                 "confidence": 0.9234,
-                "bbox": [50, 40, 320, 400],
+                "bbox": [40, 30, 290, 380],
                 "is_violation": True,
                 "violation_type": "Triple Riding",
-                "violation_confidence": 0.8891,
+                "violation_confidence": 0.8912,
                 "plate": {
                     "plate_text": "KA05HG3421",
-                    "confidence": 0.9234,
-                    "raw_ocr": "KA05HG3421"
+                    "confidence": 0.8123,
+                    "raw_ocr": "KA 05 HG 34 21"
                 },
-                "plate_bbox": None,
+                "plate_bbox": [65, 340, 240, 370],
             }
         ],
         "summary": {
@@ -316,8 +316,8 @@ DEMO_IMAGE_RESULTS = {
             "total_violations_detected": 1,
             "violation_breakdown": {
                 "Helmet Non-Compliance": 0,
-                "Seatbelt Non-Compliance": 0,
                 "Triple Riding": 1,
+                "Seatbelt Non-Compliance": 0,
                 "Wrong-Side Driving": 0,
                 "Stop-Line Violation": 0,
                 "Red-Light Running": 0,
@@ -333,25 +333,25 @@ DEMO_IMAGE_RESULTS = {
                 "detection_id": "D001",
                 "class_name": "motorcycle",
                 "confidence": 0.9123,
-                "bbox": [100, 150, 400, 450],
+                "bbox": [20, 40, 180, 300],
                 "is_violation": True,
                 "violation_type": "Helmet Non-Compliance",
-                "violation_confidence": 0.8876,
+                "violation_confidence": 0.8834,
                 "plate": {
                     "plate_text": "MH12AB5678",
-                    "confidence": 0.9012,
-                    "raw_ocr": "MH12AB5678"
+                    "confidence": 0.8567,
+                    "raw_ocr": "MH 12 AB 5678"
                 },
-                "plate_bbox": None,
+                "plate_bbox": [30, 265, 165, 290],
             },
             {
                 "detection_id": "D002",
-                "class_name": "car",
-                "confidence": 0.8541,
-                "bbox": [450, 120, 800, 420],
+                "class_name": "motorcycle",
+                "confidence": 0.8934,
+                "bbox": [200, 50, 380, 310],
                 "is_violation": True,
                 "violation_type": "Defective/Missing Plate",
-                "violation_confidence": 0.8234,
+                "violation_confidence": 0.7823,
                 "plate": {
                     "plate_text": "UNDETECTED",
                     "confidence": 0.0,
@@ -362,17 +362,17 @@ DEMO_IMAGE_RESULTS = {
             {
                 "detection_id": "D003",
                 "class_name": "car",
-                "confidence": 0.9342,
-                "bbox": [850, 180, 1200, 480],
+                "confidence": 0.8234,
+                "bbox": [390, 80, 580, 320],
                 "is_violation": False,
                 "violation_type": None,
                 "violation_confidence": None,
                 "plate": {
                     "plate_text": "KA01MJ9012",
-                    "confidence": 0.9123,
-                    "raw_ocr": "KA01MJ9012"
+                    "confidence": 0.8912,
+                    "raw_ocr": "KA 01 MJ 9012"
                 },
-                "plate_bbox": None,
+                "plate_bbox": [405, 285, 565, 310],
             }
         ],
         "summary": {
@@ -395,9 +395,9 @@ DEMO_IMAGE_RESULTS = {
         "detections": [
             {
                 "detection_id": "D001",
-                "class_name": "car",
-                "confidence": 0.8234,
-                "bbox": [120, 100, 520, 400],
+                "class_name": "motorcycle",
+                "confidence": 0.8934,
+                "bbox": [30, 40, 220, 350],
                 "is_violation": True,
                 "violation_type": "Defective/Missing Plate",
                 "violation_confidence": 0.8234,
@@ -410,18 +410,18 @@ DEMO_IMAGE_RESULTS = {
             },
             {
                 "detection_id": "D002",
-                "class_name": "motorcycle",
-                "confidence": 0.8912,
-                "bbox": [580, 120, 880, 420],
+                "class_name": "car",
+                "confidence": 0.8123,
+                "bbox": [250, 60, 480, 340],
                 "is_violation": False,
                 "violation_type": None,
                 "violation_confidence": None,
                 "plate": {
                     "plate_text": "KA03CD7890",
-                    "confidence": 0.8876,
-                    "raw_ocr": "KA03CD7890"
+                    "confidence": 0.9123,
+                    "raw_ocr": "KA 03 CD 7890"
                 },
-                "plate_bbox": None,
+                "plate_bbox": [265, 305, 460, 330],
             }
         ],
         "summary": {

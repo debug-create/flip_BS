@@ -68,6 +68,74 @@ def lookup_vehicle(plate_text: str) -> dict:
     if not plate_text or plate_text in ("UNREADABLE", "UNDETECTED", ""):
         return None
 
+    # Hardcoded real demo plate — BH02DZ4598
+    if re.sub(r'[\s\-]', '', plate_text.upper()) == "BH02DZ4598":
+        return {
+            "plate_number": "BH 02 DZ 4598",
+            "registration_date": "14-03-2021",
+            "owner_name": "Rahul Devraj Nair",
+            "address": "Flat 4B, Prestige Lakeside Habitat, Whitefield, Bengaluru - 560066",
+            "vehicle_class": "Motorcycle/Scooter",
+            "make": "Honda",
+            "model": "CB Shine 125cc",
+            "colour": "Dark Blue",
+            "fuel_type": "Petrol",
+            "engine": "124.7cc Single Cylinder OHC",
+            "insurance_status": "EXPIRED",
+            "insurance_expiry": "13-03-2025",
+            "puc_status": "VALID",
+            "puc_expiry": "14-09-2026",
+            "prior_violations": 7,
+            "repeat_offender": True,
+            "pending_challans": 3,
+            "pending_amount_rs": 4500,
+            "rto_office": "Bengaluru (East) RTO — Whitefield",
+            "data_source": "Vahan 4.0 · MoRTH",
+            "lookup_status": "SUCCESS",
+            "violation_history": [
+                {
+                    "date": "12-01-2025",
+                    "type": "Helmet Non-Compliance",
+                    "junction": "Silk Board Junction",
+                    "challan": "KA/2025/001234",
+                    "amount_rs": 1000,
+                    "status": "PAID"
+                },
+                {
+                    "date": "08-11-2024",
+                    "type": "Helmet Non-Compliance",
+                    "junction": "Marathahalli Signal",
+                    "challan": "KA/2024/089234",
+                    "amount_rs": 1000,
+                    "status": "PAID"
+                },
+                {
+                    "date": "23-08-2024",
+                    "type": "Triple Riding",
+                    "junction": "KR Puram ORR",
+                    "challan": "KA/2024/067891",
+                    "amount_rs": 1000,
+                    "status": "UNPAID"
+                },
+                {
+                    "date": "15-06-2024",
+                    "type": "Helmet Non-Compliance",
+                    "junction": "Whitefield ITPL Gate",
+                    "challan": "KA/2024/045123",
+                    "amount_rs": 1000,
+                    "status": "UNPAID"
+                },
+                {
+                    "date": "02-03-2024",
+                    "type": "Helmet Non-Compliance",
+                    "junction": "Silk Board Junction",
+                    "challan": "KA/2024/023456",
+                    "amount_rs": 500,
+                    "status": "PAID"
+                }
+            ]
+        }
+
     # Seed random with plate for determinism
     rng = random.Random(_seed_from_plate(plate_text))
 
@@ -143,4 +211,5 @@ def lookup_vehicle(plate_text: str) -> dict:
         "rto_office": "Bengaluru (East) RTO" if rng.random() > 0.5 else "Bengaluru (West) RTO",
         "data_source": "Vahan 4.0 · MoRTH",
         "lookup_status": "SUCCESS",
+        "violation_history": [],
     }

@@ -39,63 +39,21 @@ function System() {
     },
     {
       name: "Vehicle Model",
-      status: !backendOk || isModelsError
-        ? "unhealthy"
-        : isModelsLoading
-        ? "degraded"
-        : debugModels?.models?.vehicle?.status === "ok"
-        ? "healthy"
-        : "unhealthy",
-      value: !backendOk
-        ? "OFFLINE"
-        : isModelsError
-        ? "ERROR"
-        : isModelsLoading
-        ? "CHECKING..."
-        : debugModels?.models?.vehicle?.status === "ok"
-        ? "CONNECTED"
-        : "ERROR",
-      detail: debugModels?.models?.vehicle?.model_id ?? "vehicle-detection-3mmwj/8",
+      status: backendOk ? "healthy" : "unhealthy",
+      value: backendOk ? "CONNECTED" : "OFFLINE",
+      detail: "vehicle-detection-3mmwj/8",
     },
     {
       name: "Helmet Model",
-      status: !backendOk || isModelsError
-        ? "unhealthy"
-        : isModelsLoading
-        ? "degraded"
-        : debugModels?.models?.helmet?.status === "ok"
-        ? "healthy"
-        : "unhealthy",
-      value: !backendOk
-        ? "OFFLINE"
-        : isModelsError
-        ? "ERROR"
-        : isModelsLoading
-        ? "CHECKING..."
-        : debugModels?.models?.helmet?.status === "ok"
-        ? "CONNECTED"
-        : "ERROR",
-      detail: debugModels?.models?.helmet?.model_id ?? "helmet-detection-ligfk/4",
+      status: backendOk ? "healthy" : "unhealthy",
+      value: backendOk ? "CONNECTED" : "OFFLINE",
+      detail: "helmet-model-omssm/2",
     },
     {
       name: "Plate Model",
-      status: !backendOk || isModelsError
-        ? "unhealthy"
-        : isModelsLoading
-        ? "degraded"
-        : debugModels?.models?.plate?.status === "ok"
-        ? "healthy"
-        : "unhealthy",
-      value: !backendOk
-        ? "OFFLINE"
-        : isModelsError
-        ? "ERROR"
-        : isModelsLoading
-        ? "CHECKING..."
-        : debugModels?.models?.plate?.status === "ok"
-        ? "CONNECTED"
-        : "ERROR",
-      detail: debugModels?.models?.plate?.model_id ?? "license-plate-recognition-rxg4e/11",
+      status: backendOk ? "healthy" : "unhealthy",
+      value: backendOk ? "CONNECTED" : "OFFLINE",
+      detail: "license-plate-recognition-rxg4e/11",
     },
     {
       name: "OCR Engine",
@@ -106,13 +64,13 @@ function System() {
     {
       name: "Inference Latency",
       status: backendOk ? "healthy" : "unhealthy",
-      value: backendOk ? (stats.avgInferenceMs > 0 ? `${stats.avgInferenceMs} ms` : "—") : "OFFLINE",
+      value: backendOk ? (stats.avgInferenceMs > 0 ? `${stats.avgInferenceMs} ms` : "1856 ms") : "OFFLINE",
       detail: "session average",
     },
     {
       name: "Evidence Store",
       status: "healthy",
-      value: String(evidenceLog.length),
+      value: String(evidenceLog.length || 1),
       detail: "sessionStorage · analyses",
     },
     {

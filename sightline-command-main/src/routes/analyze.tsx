@@ -64,34 +64,48 @@ function Analyze() {
     setVideoResult(null);
     setErrorMsg(null);
 
-    const stepTimer = window.setInterval(() => {
-      setPipelineStep((s) => Math.min(s + 1, PIPELINE.length));
-    }, 900);
+    let apiData: any = null;
+    let apiError: any = null;
+
+    // Start backend analysis request in the background
+    const apiPromise = (async () => {
+      try {
+        apiData = isVideo ? await analyzeVideo(f) : await analyzeImage(f);
+      } catch (err) {
+        apiError = err;
+      }
+    })();
 
     try {
-      if (isVideo) {
-        const video = await analyzeVideo(f);
-        setVideoResult(video);
-        addVideoResults(video);
-        if (video.violation_timeline.length > 0) {
-          setResult(video.violation_timeline[0]);
-        }
-        toast.success(`Video analyzed — ${video.total_violations_found} violations in ${video.total_frames_analyzed} frames`);
-      } else {
-        const evidence = await analyzeImage(f);
-        setResult(evidence);
-        addEvidence(evidence);
-        toast.success(`Analysis complete — ${evidence.summary.total_violations_detected} violation(s) detected`);
+      // Animate pipeline steps one by one with a visual delay
+      for (let step = 1; step <= PIPELINE.length; step++) {
+        if (apiError) throw apiError;
+        setPipelineStep(step);
+        await new Promise((resolve) => setTimeout(resolve, 850));
       }
-      setPipelineStep(PIPELINE.length);
+
+      // Wait for backend to finish if it takes longer than the animation
+      await apiPromise;
+      if (apiError) throw apiError;
+
+      if (isVideo) {
+        setVideoResult(apiData);
+        addVideoResults(apiData);
+        if (apiData.violation_timeline.length > 0) {
+          setResult(apiData.violation_timeline[0]);
+        }
+        toast.success(`Video analyzed — ${apiData.total_violations_found} violations in ${apiData.total_frames_analyzed} frames`);
+      } else {
+        setResult(apiData);
+        addEvidence(apiData);
+        toast.success(`Analysis complete — ${apiData.summary.total_violations_detected} violation(s) detected`);
+      }
       setStage("done");
     } catch (err) {
       setStage("error");
       const msg = formatApiError(err);
       setErrorMsg(msg);
       toast.error(msg);
-    } finally {
-      window.clearInterval(stepTimer);
     }
   }
 
@@ -213,14 +227,28 @@ function Analyze() {
                 >
                   <ul className="divide-y divide-border/60">
                     {[
-                      ["Model Version", result.processing_metadata.model_version],
-                      ["Inference Time", `${result.processing_metadata.inference_time_ms} ms`],
                       ["Evidence ID", result.evidence_id],
                       ["Timestamp", new Date(result.timestamp).toLocaleString("en-IN")],
-                      [
-                        "Dimensions",
-                        `${result.processing_metadata.image_dimensions[0]}×${result.processing_metadata.image_dimensions[1]}`,
-                      ],
+                      ...Object.entries(result.processing_metadata).map(([key, val]) => {
+                        const label = key
+                          .split("_")
+                          .map((w) => {
+                            if (w === "ist") return "IST";
+                            if (w === "ms") return "ms";
+                            if (w === "ocr") return "OCR";
+                            if (w === "id") return "ID";
+                            return w.charAt(0).toUpperCase() + w.slice(1);
+                          })
+                          .join(" ");
+                        
+                        let displayVal = String(val);
+                        if (key === "inference_time_ms") {
+                          displayVal = `${parseFloat(displayVal).toFixed(1)} ms`;
+                        } else if (key === "image_dimensions" && Array.isArray(val)) {
+                          displayVal = `${val[0]}×${val[1]}`;
+                        }
+                        return [label, displayVal];
+                      })
                     ].map(([k, v]) => (
                       <li key={k} className="flex items-center justify-between px-4 py-2.5 text-[12px]">
                         <span className="text-muted-foreground uppercase tracking-wider text-[10px]">{k}</span>

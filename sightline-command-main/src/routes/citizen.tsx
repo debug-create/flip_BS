@@ -4,7 +4,7 @@ import { Panel, PageHeader } from "@/components/ui-bits";
 import {
   CloudUpload, FileImage, Loader2, ShieldAlert, ShieldCheck, X,
   Camera, ScanLine, Brain, FileCheck2, Radio, CheckCircle2, ArrowRight,
-  Upload, Download, Search, ZoomIn, MessageSquareCode
+  Upload, Download, Search, ZoomIn, MessageSquareCode, AlertTriangle
 } from "lucide-react";
 import { toast } from "sonner";
 import { analyzeImage, annotatedImageSrc, formatApiError } from "@/lib/api";

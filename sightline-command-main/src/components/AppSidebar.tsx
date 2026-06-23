@@ -5,8 +5,18 @@ import {
   ChevronLeft, ChevronRight, Siren, Radio, User,
 } from "lucide-react";
 import { ACTIVE_ALERTS_SUMMARY } from "@/lib/mockData";
+import { DottedGlobe } from "./DottedGlobe";
 
-const NAV = [
+interface NavItem {
+  readonly to: string;
+  readonly label: string;
+  readonly icon: any;
+  readonly code: string;
+  readonly isPublic?: boolean;
+  readonly isGroupStart?: boolean;
+}
+
+const NAV: readonly NavItem[] = [
   { to: "/", label: "Command Center", icon: LayoutDashboard, code: "CC-01" },
   { to: "/analyze", label: "Analyze", icon: ScanSearch, code: "AN-02" },
   { to: "/evidence", label: "Evidence Log", icon: FileSearch, code: "EV-03" },
@@ -16,7 +26,7 @@ const NAV = [
   { to: "/fleet", label: "Fleet Intelligence", icon: Truck, code: "FL-07" },
   { to: "/hotspots", label: "Hotspot Prediction", icon: Flame, code: "HP-08" },
   { to: "/system", label: "System Status", icon: ServerCog, code: "SY-09" },
-] as const;
+];
 
 export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
@@ -121,6 +131,15 @@ export function AppSidebar() {
               <div className="mono text-sm font-semibold text-primary">{ACTIVE_ALERTS_SUMMARY.predicted}</div>
               <div className="uppercase tracking-wider text-muted-foreground">Predicted</div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {!collapsed && (
+        <div className="mt-auto border-t border-border/40 pt-2 pb-3 bg-[#0a0f1a]/40 flex flex-col items-center justify-center">
+          <DottedGlobe size={120} />
+          <div className="text-[8px] font-mono text-muted-foreground/60 uppercase tracking-widest text-center">
+            BTP LOCATOR · ONLINE
           </div>
         </div>
       )}

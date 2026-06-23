@@ -11,6 +11,7 @@ export interface Detection {
   is_violation: boolean;
   violation_type: string | null;
   plate: PlateResult | null;
+  vehicle_lookup?: any;
 }
 
 export interface EvidenceSummary {
